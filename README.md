@@ -84,6 +84,8 @@ Alternatively use [nvm](https://github.com/nvm-sh/nvm): `nvm install 20 && nvm u
 
 ### 1. Clone and Python environment
 
+**Important:** Create the virtualenv and run `pip install -e .` only inside the **project root**—the folder that contains `pyproject.toml`. If you run them from `~` / `/root`, pip will error with *neither setup.py nor pyproject.toml found*. Check with `ls pyproject.toml` before installing.
+
 On **Debian / Ubuntu** you usually need a real venv module and `pip` once:
 
 ```bash
@@ -94,6 +96,7 @@ sudo apt install -y python3-venv python3-pip
 ```bash
 git clone https://github.com/smartvictor9815/TradingAgents-Web.git
 cd TradingAgents-Web
+# If you unpacked a GitHub ZIP, the folder may be TradingAgents-Web-main — cd into that instead.
 
 python3 -m venv .venv
 # Windows: .venv\Scripts\activate
@@ -102,6 +105,7 @@ source .venv/bin/activate
 # Upgrade installer + build tools (avoids “missing build_editable hook” on older pip/setuptools)
 python3 -m pip install -U pip setuptools wheel
 
+test -f pyproject.toml || { echo "Wrong directory: no pyproject.toml here. cd into the repo root."; exit 1; }
 pip install -e .
 # Optional dev tools (pytest):
 # pip install -e ".[dev]"
@@ -162,6 +166,8 @@ npm run dev
 
 Default dev server: **http://localhost:3000** (Vite proxies `/api` to **127.0.0.1:18000**). If you change the API port, update `frontend/vite.config.ts`.
 
+`vite.config.ts` sets **`host: true`** so dev and preview listen on **0.0.0.0** (reachable from other machines), not only `127.0.0.1`.
+
 ### 5. Production-style frontend build
 
 Same as above: work inside the `frontend` directory (only one `cd frontend` from repo root).
@@ -170,10 +176,28 @@ Same as above: work inside the `frontend` directory (only one `cd frontend` from
 cd frontend
 npm ci
 npm run build
-npm run preview   # serves the built app; ensure API is reachable or configure a reverse proxy
+npm run preview   # listens on 0.0.0.0:3000 — see “Public access” below
 ```
 
 After upgrading Node, remove stale install artifacts once: `rm -rf node_modules` then `npm ci` again.
+
+### Public access (e.g. cloud VPS on port 3000)
+
+1. **Start the API on the same machine** (Vite forwards `/api` to `127.0.0.1:18000`):
+
+   ```bash
+   cd /path/to/TradingAgents-Web
+   source .venv/bin/activate
+   python3 -m uvicorn app.api.main:app --host 127.0.0.1 --port 18000
+   ```
+
+2. **Open the port in the cloud console** — e.g. Alibaba Cloud **security group**: inbound rule **TCP 3000** (source: your IP or `0.0.0.0/0` if you accept the risk). Without this, the browser never reaches the VM.
+
+3. **OS firewall** (if enabled): e.g. `sudo ufw allow 3000/tcp`.
+
+4. Visit **`http://<公网IP>:3000`**. Exposing HTTP without TLS is fine for quick tests; for real use, put **Nginx/Caddy** in front with HTTPS.
+
+If preview still says “Local only”, pass flags explicitly: `npm run preview -- --host 0.0.0.0 --port 3000`.
 
 ### 6. Original CLI (upstream)
 

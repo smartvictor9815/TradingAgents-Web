@@ -25,10 +25,13 @@ const apiProxy = {
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Listen on all interfaces so LAN / cloud VMs are reachable (not only 127.0.0.1).
+    host: true,
     port: 3000,
     proxy: apiProxy,
   },
   preview: {
+    host: true,
     port: 3000,
     proxy: apiProxy,
   },
