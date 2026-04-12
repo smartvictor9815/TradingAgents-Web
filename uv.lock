@@ -2937,13 +2937,15 @@ dependencies = [
     { name = "typer" },
     { name = "typing-extensions" },
     { name = "uvicorn", extra = ["standard"] },
-    { name = "xhtml2pdf" },
     { name = "yfinance" },
 ]
 
 [package.optional-dependencies]
 dev = [
     { name = "pytest" },
+]
+pdf = [
+    { name = "xhtml2pdf" },
 ]
 
 [package.metadata]
@@ -2975,10 +2977,10 @@ requires-dist = [
     { name = "typer", specifier = ">=0.21.0" },
     { name = "typing-extensions", specifier = ">=4.14.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
-    { name = "xhtml2pdf", specifier = ">=0.2.16" },
+    { name = "xhtml2pdf", marker = "extra == 'pdf'", specifier = ">=0.2.16" },
     { name = "yfinance", specifier = ">=0.2.63" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "pdf"]
 
 [[package]]
 name = "typer"

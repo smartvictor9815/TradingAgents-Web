@@ -36,13 +36,16 @@ dependencies = [
     "yfinance>=0.2.63",
     "markdown>=3.7",
     "python-docx>=1.1.2",
-    "xhtml2pdf>=0.2.16",
     "fpdf2>=2.8.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+]
+# Richer PDF via HTML layout; may pull native Cairo stack (pycairo) on some platforms — use fpdf2-only by default.
+pdf = [
+    "xhtml2pdf>=0.2.16",
 ]
 
 [project.scripts]

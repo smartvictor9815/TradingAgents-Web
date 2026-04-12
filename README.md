@@ -115,7 +115,20 @@ pip install .
 
 Use **`python3`** (not `python`) unless you installed the `python-is-python3` package.
 
-**Using uv (optional):** if you use [uv](https://github.com/astral-sh/uv), from the repo root you can run `uv sync` (and use `uv run python -m uvicorn …` / `uv run pytest …`) instead of `pip install -e .`. A `uv.lock` file is checked in for reproducible installs.
+**Using uv (optional):** if you use [uv](https://github.com/astral-sh/uv), from the repo root you can run `uv sync` (and use `uv run python -m uvicorn …` / `uv run pytest …`) instead of `pip install -e .`. A `uv.lock` file is checked in for reproducible installs. To include optional PDF extras: `uv sync --extra pdf`.
+
+### Optional: richer PDF export (`xhtml2pdf`)
+
+The default dependency set uses **fpdf2** only for report PDFs—no native Cairo stack, suitable for minimal cloud images.
+
+If you install the **`pdf`** extra (`pip install -e ".[pdf]"` or `uv sync --extra pdf`), the API will try **xhtml2pdf** first for nicer layout. That path can pull **pycairo**, which needs build tools and Cairo headers on Linux:
+
+```bash
+sudo apt install -y pkg-config libcairo2-dev python3-dev
+pip install -e ".[pdf]"
+```
+
+If you skip this extra, PDF export still works via fpdf2 (simpler formatting).
 
 ### 2. Environment variables
 
