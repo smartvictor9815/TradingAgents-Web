@@ -68,7 +68,19 @@ Compared with **[TauricResearch/TradingAgents](https://github.com/TauricResearch
 ### Prerequisites
 
 - **Python** 3.10+ (3.12 recommended for smoother wheels; 3.14 may show third-party warnings).
-- **Node.js** 20+ and npm (for the web UI).
+- **Node.js** **20+** and a matching **npm** (for the web UI). Older Node (e.g. Ubuntu’s default **12.x**) **cannot** run Vite 6 or TypeScript 5—you will see `SyntaxError: Unexpected token '?'` or `Unexpected reserved word` on `await`.
+
+### Node.js on Ubuntu / Debian (if `node -v` is below 20)
+
+The stock `nodejs` package on many LTS images is **too old**. Install **Node 20 LTS**, for example with [NodeSource](https://github.com/nodesource/distributions):
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node -v   # should show v20.x
+```
+
+Alternatively use [nvm](https://github.com/nvm-sh/nvm): `nvm install 20 && nvm use 20`.
 
 ### 1. Clone and Python environment
 
@@ -127,6 +139,8 @@ OpenAPI docs: `http://127.0.0.1:18000/docs`
 
 ### 4. Run the web UI
 
+From the **repository root**, enter `frontend` **once** (if your prompt already shows `.../frontend#`, skip `cd frontend`):
+
 ```bash
 cd frontend
 npm ci
@@ -137,12 +151,16 @@ Default dev server: **http://localhost:3000** (Vite proxies `/api` to **127.0.0.
 
 ### 5. Production-style frontend build
 
+Same as above: work inside the `frontend` directory (only one `cd frontend` from repo root).
+
 ```bash
 cd frontend
 npm ci
 npm run build
 npm run preview   # serves the built app; ensure API is reachable or configure a reverse proxy
 ```
+
+After upgrading Node, remove stale install artifacts once: `rm -rf node_modules` then `npm ci` again.
 
 ### 6. Original CLI (upstream)
 
