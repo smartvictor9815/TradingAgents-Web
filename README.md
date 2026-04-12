@@ -199,6 +199,14 @@ After upgrading Node, remove stale install artifacts once: `rm -rf node_modules`
 
 If preview still says “Local only”, pass flags explicitly: `npm run preview -- --host 0.0.0.0 --port 3000`.
 
+**Custom domain / “host is not allowed”:** Vite 6 checks the `Host` header. This repo defaults to **allowing any host** so names like `trade.example.com` work behind a reverse proxy. To **restrict** to specific hostnames, set before `npm run dev` / `preview`:
+
+```bash
+export VITE_ALLOWED_HOSTS=trade.example.com,www.example.com
+```
+
+Use `VITE_ALLOWED_HOSTS=*` or `all` explicitly if you ever need to override a stricter default.
+
 ### 6. Original CLI (upstream)
 
 The interactive CLI is still available after `pip install -e .`:
