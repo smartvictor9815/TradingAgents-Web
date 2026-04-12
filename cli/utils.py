@@ -241,6 +241,7 @@ def select_llm_provider() -> tuple[str, str | None]:
         ("Anthropic", "https://api.anthropic.com/"),
         ("xAI", "https://api.x.ai/v1"),
         ("Openrouter", "https://openrouter.ai/api/v1"),
+        ("Volcengine", "https://ark.cn-beijing.volces.com/api/v3"),
         ("Ollama", "http://localhost:11434/v1"),
     ]
     
@@ -334,8 +335,8 @@ def ask_output_language() -> str:
         "Select Output Language:",
         choices=[
             questionary.Choice("English (default)", "English"),
-            questionary.Choice("Chinese (中文)", "Chinese"),
-            questionary.Choice("Japanese (日本語)", "Japanese"),
+            questionary.Choice("Chinese", "Chinese"),
+            questionary.Choice("Japanese", "Japanese"),
             questionary.Choice("Korean (한국어)", "Korean"),
             questionary.Choice("Hindi (हिन्दी)", "Hindi"),
             questionary.Choice("Spanish (Español)", "Spanish"),

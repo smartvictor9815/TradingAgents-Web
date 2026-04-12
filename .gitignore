@@ -217,3 +217,22 @@ __marimo__/
 
 # Cache
 **/data_cache/
+
+# CLI / graph run outputs (see tradingagents.default_config results_dir)
+results/
+
+# API SQLite (report_store), CLI "Save report?" output, stray local DBs
+data/
+reports/
+*.db
+
+# Frontend (Vite / npm)
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Editor / OS junk
+.DS_Store
+*.bak
+*.bak.*
+*.backup*

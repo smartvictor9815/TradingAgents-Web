@@ -65,6 +65,20 @@ MODEL_OPTIONS: ProviderModeOptions = {
     },
     # OpenRouter models are fetched dynamically at CLI runtime.
     # No static entries needed; any model ID is accepted by the validator.
+    "volcengine": {
+        "quick": [
+            ("DeepSeek V3-1 Terminus", "deepseek-v3-1-terminus"),
+            ("DeepSeek V3-2", "deepseek-v3-2-251201"),
+            ("Doubao 1.5 Pro 32K", "doubao-1-5-pro-32k-250115"),
+            ("Doubao-Seed-2.0-pro", "doubao-seed-2-0-pro-260215"),
+        ],
+        "deep": [
+            ("DeepSeek V3-1 Terminus", "deepseek-v3-1-terminus"),
+            ("DeepSeek V3-2", "deepseek-v3-2-251201"),
+            ("Doubao 1.5 Pro 32K", "doubao-1-5-pro-32k-250115"),
+            ("Doubao-Seed-2.0-pro", "doubao-seed-2-0-pro-260215"),
+        ],
+    },
     "ollama": {
         "quick": [
             ("Qwen3:latest (8B, local)", "qwen3:latest"),

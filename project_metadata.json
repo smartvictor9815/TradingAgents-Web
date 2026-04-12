@@ -1,0 +1,36 @@
+{
+  "project": "TradingAgents-Plus",
+  "version": "2.0.0-orchestrated",
+  "orchestrator_state": "Completed",
+  "agent_metrics": {
+    "pm_agent": {
+      "status": "Verified",
+      "failures": 0
+    },
+    "expert_agent": {
+      "status": "Verified",
+      "failures": 0
+    },
+    "backend_agent": {
+      "status": "Verified",
+      "failures": 0
+    },
+    "frontend_agent": {
+      "status": "Verified",
+      "failures": 0
+    },
+    "qa_agent": {
+      "status": "Verified",
+      "failures": 0
+    },
+    "docs_agent": {
+      "status": "Verified",
+      "failures": 0
+    }
+  },
+  "deployment": {
+    "backend_url": "http://localhost:8000/api",
+    "frontend_url": "http://localhost:3000",
+    "sse_capabilities": true
+  }
+}
