@@ -223,7 +223,8 @@ results/
 
 # API SQLite (report_store), CLI "Save report?" output, stray local DBs
 data/
-reports/
+# Only ignore runtime/output dir at repo root (not tradingagents/reports package)
+/reports/
 *.db
 
 # Frontend (Vite / npm)
