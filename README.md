@@ -72,18 +72,36 @@ Compared with **[TauricResearch/TradingAgents](https://github.com/TauricResearch
 
 ### 1. Clone and Python environment
 
+On **Debian / Ubuntu** you usually need a real venv module and `pip` once:
+
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip
+```
+
 ```bash
 git clone https://github.com/smartvictor9815/TradingAgents-Web.git
 cd TradingAgents-Web
 
-python -m venv .venv
+python3 -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate
+
+# Upgrade installer + build tools (avoids “missing build_editable hook” on older pip/setuptools)
+python3 -m pip install -U pip setuptools wheel
 
 pip install -e .
 # Optional dev tools (pytest):
 # pip install -e ".[dev]"
 ```
+
+If `pip install -e .` still errors, install a non-editable build (run API **from this directory** so `import app` works):
+
+```bash
+pip install .
+```
+
+Use **`python3`** (not `python`) unless you installed the `python-is-python3` package.
 
 **Using uv (optional):** if you use [uv](https://github.com/astral-sh/uv), from the repo root you can run `uv sync` (and use `uv run python -m uvicorn …` / `uv run pytest …`) instead of `pip install -e .`. A `uv.lock` file is checked in for reproducible installs.
 
@@ -99,8 +117,10 @@ cp .env.example .env
 From the repo root (with the venv activated):
 
 ```bash
-python -m uvicorn app.api.main:app --host 127.0.0.1 --port 18000
+python3 -m uvicorn app.api.main:app --host 127.0.0.1 --port 18000
 ```
+
+(On Windows venv, `python` is usually fine; Linux images often only provide `python3`.)
 
 Health check: `http://127.0.0.1:18000/api/health`  
 OpenAPI docs: `http://127.0.0.1:18000/docs`

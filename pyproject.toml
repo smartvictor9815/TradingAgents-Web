@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+# setuptools>=64 implements PEP 660 (editable installs). Older versions make `pip install -e .` fail.
+requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
