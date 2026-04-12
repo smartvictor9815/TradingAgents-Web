@@ -1,4 +1,4 @@
-# TradingAgents (extended fork)
+# TradingAgents-Web
 
 This repository is **derivative work** built on top of **[TradingAgents](https://github.com/TauricResearch/TradingAgents)** by [Tauric Research](https://github.com/TauricResearch)—a multi-agent LLM framework for financial analysis ([paper](https://arxiv.org/abs/2412.20138)). You get the **same research engine and terminal program** as the original project; this fork **adds a website you can use in the browser**, **saves your runs so you can open them later**, and **lets you download polished reports**—plus small reliability and safety improvements on the server side.
 
@@ -6,12 +6,26 @@ This repository is **derivative work** built on top of **[TradingAgents](https:/
 
 ---
 
-## Upstream reference
+## Repository links
 
 | Resource | Link |
 |----------|------|
+| **This fork** | [github.com/smartvictor9815/TradingAgents-Web](https://github.com/smartvictor9815/TradingAgents-Web) |
 | Original project | [github.com/TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) |
-| arXiv | [2412.20138](https://arxiv.org/abs/2412.20138) |
+
+---
+
+## Project layout
+
+| Path | Role |
+|------|------|
+| `app/` | FastAPI backend (`app.api.main`), report store, export, SSE |
+| `frontend/` | Vite + React UI (dev server proxies `/api` to the backend) |
+| `tradingagents/` | Multi-agent analysis engine (upstream-derived) |
+| `cli/` | Original interactive terminal program |
+| `main.py` | Small example script calling `TradingAgentsGraph` programmatically |
+
+Run backend and CLI commands from the **repository root** so Python can import the `app` package (it is kept as a top-level package alongside the installable `tradingagents` / `cli` packages).
 
 ---
 
@@ -59,8 +73,8 @@ Compared with **[TauricResearch/TradingAgents](https://github.com/TauricResearch
 ### 1. Clone and Python environment
 
 ```bash
-git clone <your-fork-or-mirror-url> TradingAgents
-cd TradingAgents
+git clone https://github.com/smartvictor9815/TradingAgents-Web.git
+cd TradingAgents-Web
 
 python -m venv .venv
 # Windows: .venv\Scripts\activate
@@ -70,6 +84,8 @@ pip install -e .
 # Optional dev tools (pytest):
 # pip install -e ".[dev]"
 ```
+
+**Using uv (optional):** if you use [uv](https://github.com/astral-sh/uv), from the repo root you can run `uv sync` (and use `uv run python -m uvicorn …` / `uv run pytest …`) instead of `pip install -e .`. A `uv.lock` file is checked in for reproducible installs.
 
 ### 2. Environment variables
 
@@ -133,6 +149,8 @@ python -m compileall -q app tradingagents
 pip install -e ".[dev]"
 PYTHONPATH=. pytest tests/ -v
 ```
+
+**CI:** [GitHub Actions](https://github.com/smartvictor9815/TradingAgents-Web/actions) runs frontend `npm ci` → lint → build and a Python `compileall` pass on pushes and pull requests to `main` / `master` (see `.github/workflows/ci.yml`).
 
 ---
 
