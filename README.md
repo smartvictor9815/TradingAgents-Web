@@ -84,6 +84,8 @@ With optional PDF extra:
 curl -fsSL https://raw.githubusercontent.com/smartvictor9815/TradingAgents-Web/main/scripts/install_from_github.sh | INSTALL_PDF_EXTRA=1 bash
 ```
 
+> On Ubuntu/Debian, if Node.js is missing or below v20, the installer now attempts automatic Node.js 20 installation via NodeSource (requires `sudo`).
+
 If you already cloned the repository, run from the repository root:
 
 ```bash
