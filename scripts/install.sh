@@ -9,6 +9,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+PDF_EXTRA_ENABLED="${INSTALL_PDF_EXTRA:-0}"
 
 echo "==> TradingAgents-Web one-click installer"
 
@@ -97,6 +98,53 @@ auto_install_node_if_needed() {
   echo "Node installed successfully: $(node -v), npm $(npm -v)"
 }
 
+ensure_pdf_extra_deps_if_needed() {
+  if [[ "$PDF_EXTRA_ENABLED" != "1" ]]; then
+    return 0
+  fi
+
+  echo "==> INSTALL_PDF_EXTRA=1 detected, checking native PDF dependencies..."
+
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    if ! command -v brew >/dev/null 2>&1; then
+      echo "WARNING: Homebrew not found; cannot auto-install macOS PDF deps."
+      echo "         Falling back to base install (fpdf2-only)."
+      PDF_EXTRA_ENABLED=0
+      return 0
+    fi
+    brew list pkgconf >/dev/null 2>&1 || brew install pkgconf
+    brew list cairo >/dev/null 2>&1 || brew install cairo
+    brew list cmake >/dev/null 2>&1 || brew install cmake
+    # Help pycairo locate brew-installed pkgconfig metadata.
+    local brew_prefix
+    brew_prefix="$(brew --prefix)"
+    export PKG_CONFIG_PATH="$brew_prefix/lib/pkgconfig:$brew_prefix/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+    return 0
+  fi
+
+  if [[ -f "/etc/os-release" ]]; then
+    # shellcheck disable=SC1091
+    source /etc/os-release
+    local distro="${ID:-}"
+    local distro_like="${ID_LIKE:-}"
+    if [[ "$distro" == "ubuntu" || "$distro" == "debian" || "$distro_like" == *"debian"* ]]; then
+      if ! command -v sudo >/dev/null 2>&1; then
+        echo "WARNING: sudo not found; cannot install native PDF deps automatically."
+        echo "         Falling back to base install (fpdf2-only)."
+        PDF_EXTRA_ENABLED=0
+        return 0
+      fi
+      sudo apt-get update
+      sudo apt-get install -y pkg-config libcairo2-dev python3-dev cmake
+      return 0
+    fi
+  fi
+
+  echo "WARNING: Unsupported OS for auto native PDF deps install."
+  echo "         Falling back to base install (fpdf2-only)."
+  PDF_EXTRA_ENABLED=0
+}
+
 PYTHON_BIN=""
 if command -v python3 >/dev/null 2>&1; then
   PYTHON_BIN="python3"
@@ -128,9 +176,18 @@ source ".venv/bin/activate"
 echo "==> Upgrading pip/build tools"
 python -m pip install --upgrade pip setuptools wheel
 
+ensure_pdf_extra_deps_if_needed
+
 echo "==> Installing backend package (editable)"
-if [[ "${INSTALL_PDF_EXTRA:-0}" == "1" ]]; then
+if [[ "$PDF_EXTRA_ENABLED" == "1" ]]; then
+  set +e
   pip install -e ".[pdf]"
+  rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    echo "WARNING: PDF extra install failed. Falling back to base install (fpdf2-only)."
+    pip install -e .
+  fi
 else
   pip install -e .
 fi
