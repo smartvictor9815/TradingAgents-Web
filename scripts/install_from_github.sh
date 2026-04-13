@@ -20,6 +20,20 @@ fi
 
 if [[ -d "$TARGET_DIR/.git" ]]; then
   echo "==> Existing repo found at: $TARGET_DIR"
+  cd "$TARGET_DIR"
+  set +e
+  git fetch origin "$BRANCH"
+  fetch_rc=$?
+  git checkout "$BRANCH"
+  checkout_rc=$?
+  git pull --ff-only origin "$BRANCH"
+  pull_rc=$?
+  set -e
+  if [[ "$fetch_rc" -ne 0 || "$checkout_rc" -ne 0 || "$pull_rc" -ne 0 ]]; then
+    echo "WARNING: Failed to fast-forward existing repo to latest $BRANCH."
+    echo "         Continuing with local checkout as-is."
+  fi
+  cd ..
 else
   echo "==> Cloning repository from GitHub..."
   git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$TARGET_DIR"

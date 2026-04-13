@@ -106,13 +106,19 @@ ensure_pdf_extra_deps_if_needed() {
   echo "==> INSTALL_PDF_EXTRA=1 detected, checking native PDF dependencies..."
 
   if [[ "$(uname -s)" == "Darwin" ]]; then
+    if [[ -x "/opt/homebrew/bin/brew" ]] && ! command -v brew >/dev/null 2>&1; then
+      export PATH="/opt/homebrew/bin:$PATH"
+    fi
+    if [[ -x "/usr/local/bin/brew" ]] && ! command -v brew >/dev/null 2>&1; then
+      export PATH="/usr/local/bin:$PATH"
+    fi
     if ! command -v brew >/dev/null 2>&1; then
       echo "WARNING: Homebrew not found; cannot auto-install macOS PDF deps."
       echo "         Falling back to base install (fpdf2-only)."
       PDF_EXTRA_ENABLED=0
       return 0
     fi
-    brew list pkgconf >/dev/null 2>&1 || brew install pkgconf
+    brew list pkg-config >/dev/null 2>&1 || brew install pkg-config
     brew list cairo >/dev/null 2>&1 || brew install cairo
     brew list cmake >/dev/null 2>&1 || brew install cmake
     # Help pycairo locate brew-installed pkgconfig metadata.

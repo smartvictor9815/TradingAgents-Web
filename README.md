@@ -86,6 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/smartvictor9815/TradingAgents-Web/m
 
 > On Ubuntu/Debian, if Node.js is missing or below v20, the installer attempts automatic Node.js 20 installation via NodeSource (requires `sudo`).
 > When `INSTALL_PDF_EXTRA=1` is used, the installer also tries to install native PDF build dependencies automatically (Ubuntu/Debian via `apt`, macOS via Homebrew). If that step still fails, it falls back to base install (fpdf2-only).
+> If `TradingAgents-Web/` already exists, the bootstrap script now tries to fast-forward it to latest `main` before installation.
 
 If you already cloned the repository, run from the repository root:
 
