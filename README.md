@@ -199,6 +199,32 @@ Default dev server: **http://localhost:3000** (Vite proxies `/api` to **127.0.0.
 
 `vite.config.ts` sets **`host: true`** so dev and preview listen on **0.0.0.0** (reachable from other machines), not only `127.0.0.1`.
 
+### Start/stop both services with scripts
+
+From the repository root:
+
+```bash
+bash scripts/start_services.sh
+```
+
+Stop both services:
+
+```bash
+bash scripts/stop_services.sh
+```
+
+Check current service status:
+
+```bash
+bash scripts/status_services.sh
+```
+
+Optional custom ports/hosts when starting:
+
+```bash
+API_PORT=18000 FRONTEND_PORT=3000 bash scripts/start_services.sh
+```
+
 ### 5. Production-style frontend build
 
 Same as above: work inside the `frontend` directory (only one `cd frontend` from repo root).
