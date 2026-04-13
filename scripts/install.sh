@@ -235,8 +235,17 @@ auto_install_node_if_needed
 echo "Node OK: $(node -v)"
 
 echo "==> Setting up Python virtual environment"
+if [[ -d ".venv" && ! -f ".venv/bin/activate" ]]; then
+  echo "WARNING: Existing .venv is incomplete; recreating..."
+  rm -rf ".venv"
+fi
 if [[ ! -d ".venv" ]]; then
   "$PYTHON_BIN" -m venv .venv
+fi
+if [[ ! -f ".venv/bin/activate" ]]; then
+  echo "ERROR: Virtual environment creation failed (.venv/bin/activate missing)."
+  echo "Try: rm -rf .venv && \"$PYTHON_BIN\" -m venv .venv"
+  exit 1
 fi
 
 # shellcheck disable=SC1091
