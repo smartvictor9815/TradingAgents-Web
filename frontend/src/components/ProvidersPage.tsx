@@ -4,19 +4,15 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Plus, Trash2, Edit2, Save, X, Loader2, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
+import type { LlmProviderDefaults } from "../config/defaultProviders";
+import { DEFAULT_LLM_PROVIDERS } from "../config/defaultProviders";
+import { PROVIDERS_STORAGE_KEY } from "../utils/providerUsageStorage";
 
-interface Provider {
-  id: string;
-  name: string;
-  baseUrl: string;
-  apiKey: string;
-  quickThinkModel: string;
-  deepThinkModel: string;
-}
+type Provider = LlmProviderDefaults;
 
 /** Map request.provider for /api/test-provider: id prefix is stable even if display name is localized. */
 function providerSlugForApi(provider: Provider): string {
-  const slug = provider.id.split("-")[0]?.toLowerCase() ?? "";
+  const slug = provider.id.split("-")[0]?.trim().toLowerCase() ?? "";
   const known = new Set([
     "openai",
     "anthropic",
@@ -28,51 +24,22 @@ function providerSlugForApi(provider: Provider): string {
     "ollama",
   ]);
   if (known.has(slug)) return slug;
-  return provider.name.toLowerCase();
+  const name = provider.name.trim().toLowerCase();
+  if (name.includes("volc")) return "volcengine";
+  if (name.includes("火山")) return "volcengine";
+  return name;
 }
 
-const DEFAULT_PROVIDERS: Provider[] = [
-  {
-    id: "openai-default",
-    name: "OpenAI",
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "",
-    quickThinkModel: "gpt-4o-mini",
-    deepThinkModel: "o1",
-  },
-  {
-    id: "anthropic-default",
-    name: "Anthropic",
-    baseUrl: "https://api.anthropic.com/v1",
-    apiKey: "",
-    quickThinkModel: "claude-3-5-haiku-20241022",
-    deepThinkModel: "claude-3-7-sonnet-20250219",
-  },
-  {
-    id: "google-default",
-    name: "Google",
-    baseUrl: "https://generativelanguage.googleapis.com/v1",
-    apiKey: "",
-    quickThinkModel: "gemini-2.0-flash-exp",
-    deepThinkModel: "gemini-2.0-flash-thinking-exp",
-  },
-  {
-    id: "deepseek-default",
-    name: "DeepSeek",
-    baseUrl: "https://api.deepseek.com/v1",
-    apiKey: "",
-    quickThinkModel: "deepseek-chat",
-    deepThinkModel: "deepseek-reasoner",
-  },
-  {
-    id: "volcengine-default",
-    name: "VolcEngine",
-    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
-    apiKey: "",
-    quickThinkModel: "deepseek-v3-2-251201",
-    deepThinkModel: "deepseek-v3-2-251201",
-  },
-];
+function normalizeBaseUrlForProvider(providerKey: string, rawBaseUrl: string): string {
+  let url = rawBaseUrl.trim();
+  if (providerKey === "volcengine") {
+    // VolcEngine OpenAI-compatible endpoint is expected under /api/v3.
+    if (/^https?:\/\/ark\.cn-beijing\.volces\.com\/?$/i.test(url)) {
+      url = "https://ark.cn-beijing.volces.com/api/v3";
+    }
+  }
+  return url;
+}
 
 export function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -89,7 +56,7 @@ export function ProvidersPage() {
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem('tradingagents-providers');
+    const saved = localStorage.getItem(PROVIDERS_STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -97,16 +64,16 @@ export function ProvidersPage() {
       } catch (e) {
         console.error('Failed to load providers:', e);
         // If parsing fails, initialize with default providers
-        saveProviders(DEFAULT_PROVIDERS);
+        saveProviders([...DEFAULT_LLM_PROVIDERS]);
       }
     } else {
       // First time initialization - load default providers
-      saveProviders(DEFAULT_PROVIDERS);
+      saveProviders([...DEFAULT_LLM_PROVIDERS]);
     }
   }, []);
 
   const saveProviders = (newProviders: Provider[]) => {
-    localStorage.setItem('tradingagents-providers', JSON.stringify(newProviders));
+    localStorage.setItem(PROVIDERS_STORAGE_KEY, JSON.stringify(newProviders));
     setProviders(newProviders);
   };
 
@@ -160,16 +127,18 @@ export function ProvidersPage() {
   // Test provider connection via backend API
   const testProviderConnection = async (provider: Provider): Promise<{success: boolean; error?: string}> => {
     try {
+      const providerKey = providerSlugForApi(provider);
+      const baseUrl = normalizeBaseUrlForProvider(providerKey, provider.baseUrl);
       const response = await fetch('/api/test-provider', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          provider: providerSlugForApi(provider),
-          baseUrl: provider.baseUrl,
-          apiKey: provider.apiKey,
-          model: provider.quickThinkModel,
+          provider: providerKey,
+          baseUrl,
+          apiKey: provider.apiKey.trim(),
+          model: provider.quickThinkModel.trim(),
         }),
       });
 

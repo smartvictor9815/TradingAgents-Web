@@ -40,15 +40,11 @@ import {
   TRADING_AGENTS_CONFIG_STORAGE_KEY,
   decryptAlphaVantageKeyFromParsed,
 } from "../utils/tradingAgentsConfigStorage";
+import type { LlmProviderDefaults } from "../config/defaultProviders";
+import { DEFAULT_LLM_PROVIDERS } from "../config/defaultProviders";
+import { PROVIDERS_STORAGE_KEY } from "../utils/providerUsageStorage";
 
-interface ProviderConfig {
-  id: string;
-  name: string;
-  baseUrl: string;
-  apiKey: string;
-  quickThinkModel: string;
-  deepThinkModel: string;
-}
+type ProviderConfig = LlmProviderDefaults;
 
 interface SettingsConfig {
   outputLanguage?: string;
@@ -61,22 +57,27 @@ interface SettingsConfig {
 
 const DEFAULT_SETTINGS: SettingsConfig = {
   outputLanguage: "english",
-  analysts: ["market", "social"],
+  analysts: ["market", "social", "news", "fundamentals"],
   researchDepth: "shallow",
   dataVendors: mergeDataVendors(undefined),
 };
 
 const VALID_ANALYSTS = ["market", "social", "news", "fundamentals"];
-const DEFAULT_PROVIDERS: ProviderConfig[] = [
-  {
-    id: "volcengine-default",
-    name: "VolcEngine",
-    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
-    apiKey: "",
-    quickThinkModel: "deepseek-v3-2-251201",
-    deepThinkModel: "deepseek-v3-2-251201",
-  },
-];
+function resolveRuntimeProviderKey(provider: ProviderConfig): string {
+  const base = provider.id.split("-")[0]?.toLowerCase() ?? "";
+  const known = new Set([
+    "openai",
+    "anthropic",
+    "google",
+    "deepseek",
+    "volcengine",
+    "xai",
+    "openrouter",
+    "ollama",
+  ]);
+  if (known.has(base)) return base;
+  return provider.name.trim().toLowerCase() || base || "openai";
+}
 
 // Map backend status to frontend status
 const analysisExportMenuItemClass =
@@ -169,13 +170,13 @@ export function AnalysisPage() {
 
   const loadProviders = (): ProviderConfig[] => {
     try {
-      const savedProviders = localStorage.getItem('tradingagents-providers');
-      if (!savedProviders) return DEFAULT_PROVIDERS;
+      const savedProviders = localStorage.getItem(PROVIDERS_STORAGE_KEY);
+      if (!savedProviders) return [...DEFAULT_LLM_PROVIDERS];
       const parsed = JSON.parse(savedProviders);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_PROVIDERS;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : [...DEFAULT_LLM_PROVIDERS];
     } catch (e) {
       console.error('Failed to load providers:', e);
-      return DEFAULT_PROVIDERS;
+      return [...DEFAULT_LLM_PROVIDERS];
     }
   };
 
@@ -315,9 +316,12 @@ export function AnalysisPage() {
       setConfig(currentConfig);
     })();
 
-    const savedProviders = localStorage.getItem('tradingagents-providers');
+    const savedProviders = localStorage.getItem(PROVIDERS_STORAGE_KEY);
     if (!savedProviders) {
-      localStorage.setItem('tradingagents-providers', JSON.stringify(DEFAULT_PROVIDERS));
+      localStorage.setItem(
+        PROVIDERS_STORAGE_KEY,
+        JSON.stringify([...DEFAULT_LLM_PROVIDERS]),
+      );
     }
   }, []);
 
@@ -399,7 +403,7 @@ export function AnalysisPage() {
       ticker: ticker.trim(),
       analysis_date: analysisDate,
       runtime: {
-        llm_provider: selectedProvider.id,
+        llm_provider: resolveRuntimeProviderKey(selectedProvider),
         backend_url: selectedProvider.baseUrl,
         quick_think_llm: selectedProvider.quickThinkModel,
         deep_think_llm: selectedProvider.deepThinkModel,

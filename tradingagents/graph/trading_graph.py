@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 import json
 from datetime import date
-from typing import Dict, Any, Tuple, List, Optional, Callable
+from typing import Dict, Any, Tuple, List, Optional
 
 from langgraph.prebuilt import ToolNode
 from langchain_core.messages import AIMessage, ToolMessage, HumanMessage

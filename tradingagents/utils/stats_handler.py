@@ -166,8 +166,8 @@ class StatsCallbackHandler(BaseCallbackHandler):
 
     def on_llm_start(
         self,
-        serialized: Dict[str, Any],
-        prompts: List[str],
+        _serialized: Dict[str, Any],
+        _prompts: List[str],
         **kwargs: Any,
     ) -> None:
         """Increment LLM call counter when an LLM starts."""
@@ -176,7 +176,7 @@ class StatsCallbackHandler(BaseCallbackHandler):
 
     def on_chat_model_start(
         self,
-        serialized: Dict[str, Any],
+        _serialized: Dict[str, Any],
         messages: List[List[Any]],
         **kwargs: Any,
     ) -> None:
@@ -197,8 +197,8 @@ class StatsCallbackHandler(BaseCallbackHandler):
 
     def on_tool_start(
         self,
-        serialized: Dict[str, Any],
-        input_str: str,
+        _serialized: Dict[str, Any],
+        _input_str: str,
         **kwargs: Any,
     ) -> None:
         """Increment tool call counter when a tool starts."""

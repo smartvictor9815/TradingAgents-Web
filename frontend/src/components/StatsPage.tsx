@@ -1,17 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { BarChart3, TrendingUp, Activity, DollarSign, Clock } from "lucide-react";
+import type { LlmProviderDefaults } from "../config/defaultProviders";
 import {
   PROVIDERS_STORAGE_KEY,
   PROVIDERS_UPDATED_EVENT,
 } from "../utils/providerUsageStorage";
 
-interface Provider {
-  id: string;
-  name: string;
-  baseUrl: string;
-  apiKey: string;
-  quickThinkModel: string;
-  deepThinkModel: string;
+type Provider = LlmProviderDefaults & {
   stats?: {
     totalTokens: number;
     inputTokens: number;
@@ -19,7 +14,7 @@ interface Provider {
     requestCount: number;
     lastUsed?: string;
   };
-}
+};
 
 export function StatsPage() {
   const [providers, setProviders] = useState<Provider[]>([]);

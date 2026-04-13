@@ -28,6 +28,9 @@ import {
   parseHasSealedAlphaVantageKey,
 } from "../utils/tradingAgentsConfigStorage";
 import { validateAlphaVantageApiKey } from "../api/client";
+import type { LlmProviderDefaults } from "../config/defaultProviders";
+import { DEFAULT_LLM_PROVIDERS } from "../config/defaultProviders";
+import { PROVIDERS_STORAGE_KEY } from "../utils/providerUsageStorage";
 
 /** When API key is missing, Alpha Vantage cannot be used — fall back to yfinance. */
 function vendorsWithoutAvIfNoKey(
@@ -61,34 +64,16 @@ interface ConfigData {
   dataVendors: Record<DataVendorKey, DataVendorValue>;
 }
 
-interface Provider {
-  id: string;
-  name: string;
-  baseUrl: string;
-  apiKey: string;
-  quickThinkModel: string;
-  deepThinkModel: string;
-}
+type Provider = LlmProviderDefaults;
 
 const DEFAULT_CONFIG: ConfigData = {
   outputLanguage: "english",
-  analysts: ["market", "social"],
+  analysts: ["market", "social", "news", "fundamentals"],
   researchDepth: "shallow",
   llmProvider: "volcengine-default",
   alphaVantageApiKey: "GW5UFA3PTRVKGS9J",
   dataVendors: { ...DEFAULT_DATA_VENDORS },
 };
-
-const DEFAULT_PROVIDERS: Provider[] = [
-  {
-    id: "volcengine-default",
-    name: "VolcEngine",
-    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
-    apiKey: "d0c755e2-d31b-44e4-a08d-73508818f750",
-    quickThinkModel: "deepseek-v3-1-terminus",
-    deepThinkModel: "deepseek-v3-1-terminus",
-  },
-];
 
 function readInitialConfigWhenNoSavedBlob(): ConfigData {
   return {
@@ -151,7 +136,7 @@ export function SettingsPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
 
   useEffect(() => {
-    const savedProviders = localStorage.getItem('tradingagents-providers');
+    const savedProviders = localStorage.getItem(PROVIDERS_STORAGE_KEY);
     if (savedProviders) {
       try {
         const parsed = JSON.parse(savedProviders);
@@ -161,10 +146,22 @@ export function SettingsPage() {
       }
     } else {
       // Initialize with default providers if none saved
-      setProviders(DEFAULT_PROVIDERS);
-      localStorage.setItem('tradingagents-providers', JSON.stringify(DEFAULT_PROVIDERS));
+      const seed = [...DEFAULT_LLM_PROVIDERS];
+      setProviders(seed);
+      localStorage.setItem(PROVIDERS_STORAGE_KEY, JSON.stringify(seed));
     }
   }, []);
+
+  useEffect(() => {
+    if (providers.length === 0) return;
+    const selectedId = config.llmProvider;
+    const exists = selectedId
+      ? providers.some((p) => p.id === selectedId)
+      : false;
+    if (!exists) {
+      setConfig((prev) => ({ ...prev, llmProvider: providers[0].id }));
+    }
+  }, [providers, config.llmProvider]);
 
   useEffect(() => {
     const saved = localStorage.getItem(TRADING_AGENTS_CONFIG_STORAGE_KEY);

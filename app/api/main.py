@@ -94,6 +94,7 @@ PROVIDER_ID_MAP = {
     "google": "google",
     "deepseek": "deepseek",
     "volcengine": "volcengine",
+    "volc": "volcengine",
     "xai": "xai",
     "ollama": "ollama",
     "openrouter": "openrouter",
@@ -518,6 +519,16 @@ class AlphaVantageKeyValidateRequest(BaseModel):
     api_key: str
 
 
+def _mask_secret_in_text(text: str, secret: Optional[str]) -> str:
+    """Best-effort redact of request-scoped secret from error text."""
+    if not text:
+        return text
+    s = (secret or "").strip()
+    if not s:
+        return text
+    return text.replace(s, "***")
+
+
 def _alpha_vantage_key_format_error(key: str) -> Optional[str]:
     """
     Alpha Vantage assigns 16-character alphanumeric keys. Their quote endpoints currently
@@ -632,19 +643,9 @@ def validate_alpha_vantage_api_key(request: AlphaVantageKeyValidateRequest):
 async def test_provider(request: ProviderTestRequest):
     """Test LLM provider connection with a simple API call."""
     try:
-        # Map provider names to internal provider keys
-        provider_map = {
-            "openai": "openai",
-            "anthropic": "anthropic",
-            "google": "google",
-            "deepseek": "deepseek",
-            "volcengine": "volcengine",
-            "volc": "volcengine",
-            "xai": "xai",
-            "openrouter": "openrouter",
-        }
-        
-        provider_key = provider_map.get(request.provider.lower(), request.provider.lower())
+        provider_key = PROVIDER_ID_MAP.get(
+            request.provider.lower(), request.provider.lower()
+        )
         
         # Import and test the client
         from tradingagents.llm_clients.factory import create_llm_client
@@ -677,13 +678,38 @@ async def test_provider(request: ProviderTestRequest):
             error_msg = "; ".join(str(x) for x in excs) if excs else str(e)
         else:
             error_msg = str(e)
+        error_msg = _mask_secret_in_text(error_msg, request.apiKey)
+        _log.warning(
+            "Provider test failed (provider=%s model=%s base_url=%s): %s",
+            request.provider,
+            request.model,
+            request.baseUrl,
+            error_msg,
+            exc_info=isinstance(e, Exception),
+        )
         el = error_msg.lower()
-        if "authentication" in el or "api key" in el:
+        if "authentication" in el or "api key" in el or "unauthorized" in el or "invalid key" in el:
+            error_msg = "Invalid API key"
+        elif re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", el):
+            # Some providers may echo key-like identifiers in errors; do not expose raw value.
             error_msg = "Invalid API key"
         elif "model" in el and "not found" in el:
             error_msg = "Model not found - check your model name"
+        elif (
+            "name or service not known" in el
+            or "nodename nor servname provided" in el
+            or "temporary failure in name resolution" in el
+            or "dns" in el
+        ):
+            error_msg = "Cannot resolve provider host - check the Base URL domain"
+        elif "connection refused" in el:
+            error_msg = "Connection refused by provider endpoint - check host/port"
+        elif "timed out" in el or "timeout" in el:
+            error_msg = "Provider request timed out - check network or endpoint availability"
+        elif "ssl" in el or "certificate" in el:
+            error_msg = "TLS/SSL handshake failed - check endpoint certificate or proxy settings"
         elif "connection" in el:
-            error_msg = "Cannot connect to provider - check base URL"
+            error_msg = "Cannot connect to provider endpoint - check Base URL and network"
         return {"success": False, "error": error_msg[:200]}
 
 @app.get("/api/reports")

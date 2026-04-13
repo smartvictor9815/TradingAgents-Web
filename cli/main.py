@@ -11,14 +11,12 @@ load_dotenv()
 from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.live import Live
-from rich.columns import Columns
 from rich.markdown import Markdown
 from rich.layout import Layout
 from rich.text import Text
 from rich.table import Table
 from collections import deque
 import time
-from rich.tree import Tree
 from rich import box
 from rich.align import Align
 from rich.rule import Rule
@@ -1015,7 +1013,7 @@ def run_analysis():
     # Now start the display layout
     layout = create_layout()
 
-    with Live(layout, refresh_per_second=4) as live:
+    with Live(layout, refresh_per_second=4):
         # Initial display
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
