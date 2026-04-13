@@ -32,6 +32,67 @@ node_major() {
   node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0
 }
 
+ensure_python_venv_support() {
+  # Quick probe: can this interpreter create a venv?
+  set +e
+  "$PYTHON_BIN" -m venv --help >/dev/null 2>&1
+  local has_venv=$?
+  set -e
+  if [[ "$has_venv" -eq 0 ]]; then
+    return 0
+  fi
+
+  echo "==> Python venv module missing. Attempting auto-install..."
+  if [[ ! -f "/etc/os-release" ]]; then
+    echo "ERROR: Cannot auto-install python venv support on this OS."
+    echo "Please install python3-venv manually, then rerun."
+    exit 1
+  fi
+
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  local distro="${ID:-}"
+  local distro_like="${ID_LIKE:-}"
+  if [[ "$distro" != "ubuntu" && "$distro" != "debian" && "$distro_like" != *"debian"* ]]; then
+    echo "ERROR: Auto-install for python venv support currently supports Ubuntu/Debian only."
+    echo "Please install python3-venv manually, then rerun."
+    exit 1
+  fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "ERROR: sudo is required to auto-install python venv support."
+    echo "Please install python3-venv manually, then rerun."
+    exit 1
+  fi
+
+  local py_ver py_minor_pkg
+  py_ver="$("$PYTHON_BIN" - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)"
+  py_minor_pkg="python${py_ver}-venv"
+
+  sudo apt-get update
+  set +e
+  sudo apt-get install -y python3-venv "$py_minor_pkg"
+  local apt_rc=$?
+  set -e
+  if [[ "$apt_rc" -ne 0 ]]; then
+    echo "WARNING: Could not install $py_minor_pkg; retrying with python3-venv only..."
+    sudo apt-get install -y python3-venv
+  fi
+
+  set +e
+  "$PYTHON_BIN" -m venv --help >/dev/null 2>&1
+  has_venv=$?
+  set -e
+  if [[ "$has_venv" -ne 0 ]]; then
+    echo "ERROR: Python venv support still unavailable after installation attempt."
+    echo "Please run: sudo apt-get install -y python3-venv $py_minor_pkg"
+    exit 1
+  fi
+}
+
 auto_install_node_if_needed() {
   local major
   major="$(node_major)"
@@ -167,6 +228,8 @@ if sys.version_info < (3, 10):
     raise SystemExit("ERROR: Python 3.10+ is required.")
 print(f"Python OK: {sys.version.split()[0]}")
 PY
+
+ensure_python_venv_support
 
 auto_install_node_if_needed
 echo "Node OK: $(node -v)"
