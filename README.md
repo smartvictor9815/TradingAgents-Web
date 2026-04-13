@@ -70,6 +70,32 @@ Compared with **[TauricResearch/TradingAgents](https://github.com/TauricResearch
 
 ## Installation
 
+### One-click install (macOS/Linux)
+
+Install directly from GitHub (clone + setup):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/smartvictor9815/TradingAgents-Web/main/scripts/install_from_github.sh | bash
+```
+
+With optional PDF extra:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/smartvictor9815/TradingAgents-Web/main/scripts/install_from_github.sh | INSTALL_PDF_EXTRA=1 bash
+```
+
+If you already cloned the repository, run from the repository root:
+
+```bash
+bash scripts/install.sh
+```
+
+Optional richer PDF stack (xhtml2pdf path):
+
+```bash
+INSTALL_PDF_EXTRA=1 bash scripts/install.sh
+```
+
 ### Prerequisites
 
 - **Python** 3.10+ (3.12 recommended for smoother wheels; 3.14 may show third-party warnings).
