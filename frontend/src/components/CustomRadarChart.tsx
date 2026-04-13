@@ -1,45 +1,37 @@
 import { useMemo } from 'react';
 
-interface AgentConfidence {
-  analyst: number;
-  strategist: number;
-  riskAssessor: number;
-  trader: number;
-  sentiment: number;
-  technical: number;
-}
-
 interface CustomRadarChartProps {
-  data: AgentConfidence;
+  data: Record<string, number>;
+  compact?: boolean;
 }
 
-export function CustomRadarChart({ data }: CustomRadarChartProps) {
-  const agents = useMemo(() => [
-    { label: 'Analyst', value: data.analyst },
-    { label: 'Strategist', value: data.strategist },
-    { label: 'Risk Assessor', value: data.riskAssessor },
-    { label: 'Trader', value: data.trader },
-    { label: 'Sentiment', value: data.sentiment },
-    { label: 'Technical', value: data.technical },
-  ], [data]);
+export function CustomRadarChart({ data, compact = false }: CustomRadarChartProps) {
+  const agents = useMemo(
+    () =>
+      Object.entries(data)
+        .filter(([, v]) => Number.isFinite(v))
+        .map(([key, value]) => ({
+          label: key
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase()),
+          value: Math.max(0, Math.min(100, Math.round(Number(value)))),
+        })),
+    [data],
+  );
 
   const averageConfidence = useMemo(() => {
-    return Math.round((
-      data.analyst +
-      data.strategist +
-      data.riskAssessor +
-      data.trader +
-      data.sentiment +
-      data.technical
-    ) / 6);
-  }, [data]);
+    if (!agents.length) return 0;
+    return Math.round(agents.reduce((acc, a) => acc + a.value, 0) / agents.length);
+  }, [agents]);
+
+  const axisCount = Math.max(agents.length, 3);
 
   // Calculate polygon points for radar chart
   const points = useMemo(() => {
     const centerX = 200;
     const centerY = 200;
     const maxRadius = 150;
-    const angleStep = (Math.PI * 2) / agents.length;
+    const angleStep = (Math.PI * 2) / axisCount;
     
     return agents.map((agent, index) => {
       const angle = angleStep * index - Math.PI / 2; // Start from top
@@ -48,20 +40,20 @@ export function CustomRadarChart({ data }: CustomRadarChartProps) {
       const y = centerY + radius * Math.sin(angle);
       return { x, y, angle, fullRadius: maxRadius, label: agent.label, value: agent.value };
     });
-  }, [agents]);
+  }, [agents, axisCount]);
 
   const polygonPoints = points.map(p => `${p.x},${p.y}`).join(' ');
 
   // Generate grid circles
   const gridLevels = [20, 40, 60, 80, 100];
   const gridPolygons = gridLevels.map(level => {
-    const angleStep = (Math.PI * 2) / 6;
+    const angleStep = (Math.PI * 2) / axisCount;
     const radius = (level / 100) * 150;
     const centerX = 200;
     const centerY = 200;
     
     const pts = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < axisCount; i++) {
       const angle = angleStep * i - Math.PI / 2;
       const x = centerX + radius * Math.cos(angle);
       const y = centerY + radius * Math.sin(angle);
@@ -70,11 +62,20 @@ export function CustomRadarChart({ data }: CustomRadarChartProps) {
     return pts.join(' ');
   });
 
+  if (!agents.length) {
+    return (
+      <div className="rounded border border-[#30363d] bg-[#0d1117] p-3 text-xs text-[#8b949e]">
+        No confidence dimensions available.
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className={`grid grid-cols-1 ${compact ? "gap-3" : "gap-6 lg:grid-cols-3"}`}>
       {/* Custom SVG Radar Chart */}
-      <div className="lg:col-span-2 bg-black/50 rounded-lg p-4 border border-green-700">
-        <svg viewBox="0 0 400 400" className="w-full h-full">
+      <div className={`${compact ? "" : "lg:col-span-2"} bg-black/50 rounded-lg border border-green-700 ${compact ? "p-3" : "p-4"}`}>
+        <div className={compact ? "h-[250px]" : "h-full"}>
+          <svg viewBox="0 0 400 400" className="w-full h-full">
           {/* Grid levels */}
           {gridPolygons.map((pts, idx) => (
             <polygon
@@ -122,7 +123,7 @@ export function CustomRadarChart({ data }: CustomRadarChartProps) {
           
           {/* Labels */}
           {points.map((point, idx) => {
-            const labelRadius = 170;
+            const labelRadius = compact ? 162 : 170;
             const labelX = 200 + labelRadius * Math.cos(point.angle);
             const labelY = 200 + labelRadius * Math.sin(point.angle);
             
@@ -132,7 +133,7 @@ export function CustomRadarChart({ data }: CustomRadarChartProps) {
                 x={labelX}
                 y={labelY}
                 fill="rgb(74, 222, 128)"
-                fontSize="12"
+                fontSize={compact ? "10" : "12"}
                 textAnchor="middle"
                 dominantBaseline="middle"
               >
@@ -154,11 +155,42 @@ export function CustomRadarChart({ data }: CustomRadarChartProps) {
               {level}
             </text>
           ))}
-        </svg>
+          </svg>
+        </div>
+        {compact && (
+          <div className="mt-2 border-t border-green-800/60 pt-2">
+            <div className="mb-1.5 flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-green-500">Confidence Scores</h3>
+              <p className="text-[11px] text-green-600">
+                Avg <span className="font-bold text-green-400">{averageConfidence}%</span>
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5">
+              {agents.map((item) => (
+                <div key={item.label} className="rounded border border-green-800/60 bg-green-950/20 px-2 py-1">
+                  <div className="mb-0.5 flex items-center justify-between">
+                    <span className="truncate text-[10px] text-green-400">{item.label}</span>
+                    <span className="text-[10px] font-semibold text-green-300">{item.value}%</span>
+                  </div>
+                  <div className="h-1 w-full rounded-full bg-green-900/40">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        item.value >= 75 ? 'bg-green-500' :
+                        item.value >= 50 ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`}
+                      style={{ width: `${item.value}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Confidence Scores List */}
-      <div className="space-y-3">
+      <div className={`space-y-3 ${compact ? "hidden" : ""}`}>
         <h3 className="text-sm font-semibold text-green-600 mb-3">Confidence Scores</h3>
         {agents.map((item) => (
           <div key={item.label} className="bg-green-900/20 border border-green-700 rounded p-3">

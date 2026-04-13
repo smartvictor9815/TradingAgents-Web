@@ -3,6 +3,7 @@ import {
   startAnalysis,
   cancelTask,
   getTaskStatus,
+  getStoredHistory,
   AnalysisRequest,
 } from '../api/client';
 import { upsertFailedSnapshot } from '../utils/analysisReportsStorage';
@@ -41,6 +42,7 @@ interface AnalysisState {
     decision: string;
     signal: string;
     reasoning?: string;
+    dimensionConfidence?: Record<string, number>;
   } | null;
   error: string | null;
   currentReport: string;
@@ -51,6 +53,7 @@ interface AnalysisState {
     tokensIn: number;
     tokensOut: number;
     startTime: number | null;
+    endTime: number | null;
   };
 }
 
@@ -175,6 +178,73 @@ function syncTeamsFromAgentStatus(
   }));
 }
 
+function normalizeMessages(rows: unknown): AnalysisState['messages'] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null;
+      const r = row as Record<string, unknown>;
+      return {
+        time:
+          typeof r.time === 'string' && r.time.trim()
+            ? r.time
+            : '',
+        type:
+          typeof r.type === 'string' && r.type.trim()
+            ? r.type
+            : 'System',
+        content:
+          typeof r.content === 'string' ? r.content : '',
+      };
+    })
+    .filter((x): x is AnalysisState['messages'][number] => x !== null);
+}
+
+function extractMessagesFromStoredReport(raw: unknown): AnalysisState['messages'] {
+  if (!raw || typeof raw !== 'object') return [];
+  const obj = raw as Record<string, unknown>;
+  return normalizeMessages(obj.messages);
+}
+
+function toEpochSeconds(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const raw = value.trim();
+  const ms = Date.parse(raw);
+  if (!Number.isNaN(ms)) return ms / 1000;
+
+  // Fallback parser for Python isoformat strings (often microseconds without timezone),
+  // which can fail Date.parse() in some runtimes.
+  const m = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:([Zz])|([+-]\d{2}):?(\d{2}))?$/,
+  );
+  if (!m) return null;
+
+  const year = Number(m[1]);
+  const month = Number(m[2]) - 1;
+  const day = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const second = Number(m[6]);
+  const fraction = (m[7] || '').slice(0, 3).padEnd(3, '0');
+  const millis = Number(fraction || '0');
+
+  const hasZulu = !!m[8];
+  const offsetHour = m[9] ? Number(m[9]) : null;
+  const offsetMinute = m[10] ? Number(m[10]) : 0;
+
+  if (hasZulu || offsetHour !== null) {
+    const utcMs = Date.UTC(year, month, day, hour, minute, second, millis);
+    if (offsetHour === null) return utcMs / 1000;
+    const sign = offsetHour >= 0 ? 1 : -1;
+    const offsetTotalMs =
+      sign * (Math.abs(offsetHour) * 60 + Math.abs(offsetMinute)) * 60 * 1000;
+    return (utcMs - offsetTotalMs) / 1000;
+  }
+
+  return new Date(year, month, day, hour, minute, second, millis).getTime() / 1000;
+}
+
 export function useAnalysis() {
   const [analysisState, setAnalysisState] = useState<AnalysisState>({
     isAnalyzing: false,
@@ -192,6 +262,7 @@ export function useAnalysis() {
       tokensIn: 0,
       tokensOut: 0,
       startTime: null,
+      endTime: null,
     },
   });
 
@@ -269,7 +340,11 @@ export function useAnalysis() {
             reportCount: `${completedReports}/${totalReports}`,
             stats: {
               ...prev.stats,
-              startTime: Date.now() / 1000,
+              startTime:
+                (typeof data.timestamp === 'number' && Number.isFinite(data.timestamp)
+                  ? data.timestamp
+                  : prev.stats.startTime ?? Date.now() / 1000),
+              endTime: null,
             },
             messages: [
               ...prev.messages,
@@ -574,6 +649,10 @@ export function useAnalysis() {
               toolCalls: st.tool_calls ?? prev.stats.toolCalls,
               tokensIn: st.tokens_in ?? prev.stats.tokensIn,
               tokensOut: st.tokens_out ?? prev.stats.tokensOut,
+              endTime:
+                (typeof data.timestamp === 'number' && Number.isFinite(data.timestamp)
+                  ? data.timestamp
+                  : Date.now() / 1000),
             },
             error: isError ? data.error_message || 'Analysis failed' : prev.error,
             messages: [
@@ -594,6 +673,8 @@ export function useAnalysis() {
                 : {
                     decision: data.final_decision.decision,
                     signal: data.final_decision.signal ?? 'neutral',
+                    dimensionConfidence:
+                      data.final_decision.dimension_confidence ?? undefined,
                   },
           };
         });
@@ -612,6 +693,10 @@ export function useAnalysis() {
             toolCalls: st.tool_calls ?? prev.stats.toolCalls,
             tokensIn: st.tokens_in ?? prev.stats.tokensIn,
             tokensOut: st.tokens_out ?? prev.stats.tokensOut,
+            endTime:
+              (typeof data.timestamp === 'number' && Number.isFinite(data.timestamp)
+                ? data.timestamp
+                : Date.now() / 1000),
           },
           teams: prev.teams.map((team) => ({
             ...team,
@@ -676,6 +761,11 @@ export function useAnalysis() {
         isAnalyzing: true,
         hasStarted: true,
         teams: buildInitialTeams(request),
+        stats: {
+          ...prev.stats,
+          startTime: Date.now() / 1000,
+          endTime: null,
+        },
         messages: [
           {
             time: new Date().toLocaleTimeString(),
@@ -740,6 +830,7 @@ export function useAnalysis() {
         tokensIn: 0,
         tokensOut: 0,
         startTime: null,
+        endTime: null,
       },
     });
   }, []);
@@ -753,6 +844,17 @@ export function useAnalysis() {
       seenEventIds.current.clear();
       try {
         const status = await getTaskStatus(report.id);
+        const statusMessages = normalizeMessages(status.messages);
+        let storedMessages: AnalysisState['messages'] = [];
+        try {
+          const stored = await getStoredHistory(report.id);
+          storedMessages = extractMessagesFromStoredReport(stored);
+        } catch {
+          storedMessages = [];
+        }
+        if (storedMessages.length === 0) {
+          storedMessages = statusMessages;
+        }
         const cfg = status.config as Record<string, unknown> | undefined;
         const analystsRaw = cfg?.analyst_agent ?? cfg?.analysts;
         const analysts =
@@ -776,18 +878,25 @@ export function useAnalysis() {
         const analysisDate = status.analysis_date || report.analysisDate;
 
         if (status.status === 'pending' || status.status === 'running') {
+          const resumedStart =
+            toEpochSeconds(status.started_at) ??
+            toEpochSeconds(status.created_at) ??
+            Date.now() / 1000;
           setAnalysisState({
             isAnalyzing: true,
             hasStarted: true,
             taskId: status.id,
             teams: initialTeams,
-            messages: [
-              {
-                time: new Date().toLocaleTimeString(),
-                type: 'System',
-                content: `Resumed live progress for ${ticker}…`,
-              },
-            ],
+            messages:
+              storedMessages.length > 0
+                ? storedMessages
+                : [
+                    {
+                      time: new Date().toLocaleTimeString(),
+                      type: 'System',
+                      content: `Resumed live progress for ${ticker}…`,
+                    },
+                  ],
             finalDecision: null,
             error: null,
             currentReport: '',
@@ -797,13 +906,20 @@ export function useAnalysis() {
               toolCalls: 0,
               tokensIn: 0,
               tokensOut: 0,
-              startTime: Date.now() / 1000,
+              startTime: resumedStart,
+              endTime: null,
             },
           });
           return { ok: true, ticker, analysisDate };
         }
 
         if (status.status === 'completed') {
+          const completedStart =
+            toEpochSeconds(status.started_at) ??
+            toEpochSeconds(status.created_at) ??
+            null;
+          const completedEnd =
+            toEpochSeconds(status.completed_at) ?? completedStart ?? null;
           initialTeams = teamsWithUniformAgentStatus(initialTeams, 'completed');
           const fd = status.final_decision;
           setAnalysisState({
@@ -811,19 +927,15 @@ export function useAnalysis() {
             hasStarted: true,
             taskId: status.id,
             teams: initialTeams,
-            messages: [
-              {
-                time: new Date().toLocaleTimeString(),
-                type: 'System',
-                content: fd
-                  ? 'Loaded completed analysis from server.'
-                  : 'Analysis completed.',
-              },
-            ],
+            messages:
+              storedMessages.length > 0
+                ? storedMessages
+                : [],
             finalDecision: fd
               ? {
                   decision: fd.decision,
                   signal: fd.signal ?? 'neutral',
+                  dimensionConfidence: fd.dimension_confidence ?? undefined,
                 }
               : null,
             error: null,
@@ -834,13 +946,19 @@ export function useAnalysis() {
               toolCalls: 0,
               tokensIn: 0,
               tokensOut: 0,
-              startTime: null,
+              startTime: completedStart,
+              endTime: completedEnd,
             },
           });
           return { ok: true, ticker, analysisDate };
         }
 
         if (status.status === 'error') {
+          const errorStart =
+            toEpochSeconds(status.started_at) ??
+            toEpochSeconds(status.created_at) ??
+            null;
+          const errorEnd = toEpochSeconds(status.completed_at) ?? errorStart ?? null;
           initialTeams = teamsWithUniformAgentStatus(initialTeams, 'completed');
           const errMsg = status.error_message || 'Analysis failed';
           setAnalysisState({
@@ -848,13 +966,16 @@ export function useAnalysis() {
             hasStarted: true,
             taskId: status.id,
             teams: initialTeams,
-            messages: [
-              {
-                time: new Date().toLocaleTimeString(),
-                type: 'Error',
-                content: errMsg,
-              },
-            ],
+            messages:
+              storedMessages.length > 0
+                ? storedMessages
+                : [
+                    {
+                      time: new Date().toLocaleTimeString(),
+                      type: 'Error',
+                      content: errMsg,
+                    },
+                  ],
             finalDecision: null,
             error: errMsg,
             currentReport: '',
@@ -864,26 +985,36 @@ export function useAnalysis() {
               toolCalls: 0,
               tokensIn: 0,
               tokensOut: 0,
-              startTime: null,
+              startTime: errorStart,
+              endTime: errorEnd,
             },
           });
           return { ok: true, ticker, analysisDate };
         }
 
         if (status.status === 'cancelled') {
+          const cancelledStart =
+            toEpochSeconds(status.started_at) ??
+            toEpochSeconds(status.created_at) ??
+            null;
+          const cancelledEnd =
+            toEpochSeconds(status.completed_at) ?? cancelledStart ?? null;
           initialTeams = teamsWithUniformAgentStatus(initialTeams, 'completed');
           setAnalysisState({
             isAnalyzing: false,
             hasStarted: true,
             taskId: status.id,
             teams: initialTeams,
-            messages: [
-              {
-                time: new Date().toLocaleTimeString(),
-                type: 'System',
-                content: 'This analysis was cancelled.',
-              },
-            ],
+            messages:
+              storedMessages.length > 0
+                ? storedMessages
+                : [
+                    {
+                      time: new Date().toLocaleTimeString(),
+                      type: 'System',
+                      content: 'This analysis was cancelled.',
+                    },
+                  ],
             finalDecision: null,
             error: null,
             currentReport: '',
@@ -893,7 +1024,8 @@ export function useAnalysis() {
               toolCalls: 0,
               tokensIn: 0,
               tokensOut: 0,
-              startTime: null,
+              startTime: cancelledStart,
+              endTime: cancelledEnd,
             },
           });
           return { ok: true, ticker, analysisDate };

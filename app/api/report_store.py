@@ -49,7 +49,7 @@ def init_db() -> None:
             conn.close()
 
 
-def _events_to_messages(history: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+def events_to_messages(history: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     out: List[Dict[str, str]] = []
     for h in history:
         ev = h.get("event")
@@ -134,7 +134,7 @@ def save_final(
     event_history: List[Dict[str, Any]],
     final_state_snapshot: Optional[Dict[str, Any]] = None,
 ) -> None:
-    messages = _events_to_messages(event_history)
+    messages = events_to_messages(event_history)
     report: Dict[str, Any] = {
         "task_id": task_id,
         "ticker": task.get("ticker"),

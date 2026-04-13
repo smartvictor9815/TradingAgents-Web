@@ -336,23 +336,37 @@ async def _run_analysis(task_id: str, adapter: TradingAgentAPIAdapter, ticker: s
         final_decision = None
         if isinstance(final_state, dict):
             decision_text = final_state.get("final_trade_decision") or final_state.get("decision")
+            fallback_confidence = _extract_analyst_dimension_confidence(final_state)
             if decision_text:
+                rendered_decision, dimension_confidence = _extract_structured_decision(
+                    str(decision_text)
+                )
+                merged_confidence = _merge_dimension_confidence(
+                    dimension_confidence, fallback_confidence
+                )
                 final_decision = {
-                    "decision": decision_text,
+                    "decision": rendered_decision or str(decision_text),
                     "signal": signal or "neutral",
                 }
+                if merged_confidence:
+                    final_decision["dimension_confidence"] = merged_confidence
             state_snapshot = serialize_graph_state(final_state)
         elif final_state:
+            rendered_decision, dimension_confidence = _extract_structured_decision(
+                str(final_state)
+            )
             final_decision = {
-                "decision": str(final_state),
+                "decision": rendered_decision or str(final_state),
                 "signal": signal or "neutral",
             }
+            if dimension_confidence:
+                final_decision["dimension_confidence"] = dimension_confidence
 
         tasks[task_id]["status"] = "completed"
         tasks[task_id]["completed_at"] = datetime.datetime.now().isoformat()
         tasks[task_id]["final_decision"] = final_decision
 
-        # Persist before task_complete so /api/reports/{id}/export is ready when the UI unlocks.
+        # Persist before task_complete so /api/history/{id}/export is ready when the UI unlocks.
         try:
             hist = list(adapter.event_history)
             report_store.save_final(
@@ -440,7 +454,28 @@ async def get_task_status(task_id: str):
     """Get current status of an analysis task."""
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
-    return tasks[task_id]
+    payload = dict(tasks[task_id])
+
+    # Provide resumable logs so the Analysis page can restore full history
+    # instead of a synthetic "loaded" system message.
+    messages: List[Dict[str, Any]] = []
+    adapter = adapters.get(task_id)
+    if adapter is not None:
+        try:
+            hist = list(getattr(adapter, "event_history", []) or [])
+            if hist:
+                messages = report_store.events_to_messages(hist)
+        except Exception:
+            messages = []
+    if not messages:
+        try:
+            row = report_store.get_report(task_id)
+            if isinstance(row, dict) and isinstance(row.get("messages"), list):
+                messages = row.get("messages") or []
+        except Exception:
+            messages = []
+    payload["messages"] = messages
+    return payload
 
 @app.get("/api/task/{task_id}/stream")
 async def stream_task(task_id: str):
@@ -578,6 +613,146 @@ def _summarize_alpha_vantage_json(data: Any, max_len: int = 400) -> str:
     return out if len(out) <= max_len else out[: max_len - 1] + "…"
 
 
+_CONFIDENCE_KEYS = (
+    "market",
+    "sentiment",
+    "news",
+    "fundamentals",
+    "research",
+    "risk",
+)
+
+
+_ANALYST_DIMENSION_MAP = (
+    ("market_report", "market"),
+    ("sentiment_report", "sentiment"),
+    ("news_report", "news"),
+    ("fundamentals_report", "fundamentals"),
+)
+
+
+def _normalize_dimension_confidence(raw: Any) -> Optional[Dict[str, int]]:
+    if not isinstance(raw, dict):
+        return None
+    out: Dict[str, int] = {}
+    for k in _CONFIDENCE_KEYS:
+        v = raw.get(k)
+        if v is None:
+            continue
+        try:
+            n = int(round(float(v)))
+        except (TypeError, ValueError):
+            continue
+        out[k] = max(0, min(100, n))
+    return out or None
+
+
+def _extract_confidence_score_from_text(report_text: Any) -> Optional[int]:
+    """Extract confidence score from analyst report markdown."""
+    if not isinstance(report_text, str) or not report_text.strip():
+        return None
+    txt = report_text
+    patterns = (
+        r"confidence_score\s*[:：]\s*(\d{1,3})",
+        r"confidence\s*score\s*[:：]\s*(\d{1,3})",
+        r"confidence\s*[:：]\s*(\d{1,3})\s*%?",
+    )
+    for p in patterns:
+        m = re.search(p, txt, flags=re.IGNORECASE)
+        if not m:
+            continue
+        try:
+            n = int(m.group(1))
+        except (TypeError, ValueError):
+            continue
+        return max(0, min(100, n))
+    return None
+
+
+def _extract_analyst_dimension_confidence(final_state: Dict[str, Any]) -> Dict[str, int]:
+    """Fallback confidence inferred from analyst report tails."""
+    out: Dict[str, int] = {}
+    for report_key, dim in _ANALYST_DIMENSION_MAP:
+        score = _extract_confidence_score_from_text(final_state.get(report_key))
+        if score is not None:
+            out[dim] = score
+    return out
+
+
+def _merge_dimension_confidence(
+    primary: Optional[Dict[str, int]],
+    fallback: Optional[Dict[str, int]],
+) -> Optional[Dict[str, int]]:
+    if not primary and not fallback:
+        return None
+    merged: Dict[str, int] = {}
+    for k in _CONFIDENCE_KEYS:
+        if primary and k in primary:
+            merged[k] = primary[k]
+        elif fallback and k in fallback:
+            merged[k] = fallback[k]
+    return merged or None
+
+
+def _extract_structured_decision(decision_text: str) -> tuple[str, Optional[Dict[str, int]]]:
+    """
+    Parse optional JSON payload emitted by portfolio manager and return:
+    - markdown decision text for UI
+    - normalized dimension confidence map
+    """
+    txt = (decision_text or "").strip()
+    if not txt:
+        return "", None
+
+    candidates: List[str] = []
+    fenced = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", txt, flags=re.IGNORECASE)
+    if fenced:
+        candidates.append(fenced.group(1))
+    if txt.startswith("{") and txt.endswith("}"):
+        candidates.append(txt)
+
+    parsed: Optional[Dict[str, Any]] = None
+    for c in candidates:
+        try:
+            obj = json.loads(c)
+            if isinstance(obj, dict):
+                parsed = obj
+                break
+        except json.JSONDecodeError:
+            continue
+
+    if parsed is None:
+        return txt, None
+
+    confidence = _normalize_dimension_confidence(parsed.get("dimension_confidence"))
+    rating = str(parsed.get("rating") or "").strip()
+    executive_summary = str(parsed.get("executive_summary") or "").strip()
+    investment_thesis = str(parsed.get("investment_thesis") or "").strip()
+
+    if rating or executive_summary or investment_thesis:
+        lines: List[str] = []
+        if rating:
+            lines.append("## Rating")
+            lines.append(rating)
+            lines.append("")
+        if executive_summary:
+            lines.append("## Executive Summary")
+            lines.append(executive_summary)
+            lines.append("")
+        if investment_thesis:
+            lines.append("## Investment Thesis")
+            lines.append(investment_thesis)
+            lines.append("")
+        if confidence:
+            lines.append("## Dimension Confidence")
+            for k in _CONFIDENCE_KEYS:
+                if k in confidence:
+                    lines.append(f"- {k}: {confidence[k]}%")
+        return "\n".join(lines).strip(), confidence
+
+    return txt, confidence
+
+
 @app.post("/api/validate-alpha-vantage")
 def validate_alpha_vantage_api_key(request: AlphaVantageKeyValidateRequest):
     """Validate key shape (16 alnum) and reach Alpha Vantage; see _alpha_vantage_key_format_error docstring."""
@@ -712,22 +887,25 @@ async def test_provider(request: ProviderTestRequest):
             error_msg = "Cannot connect to provider endpoint - check Base URL and network"
         return {"success": False, "error": error_msg[:200]}
 
+@app.get("/api/history")
 @app.get("/api/reports")
 async def list_reports(limit: int = 200):
-    """List completed analysis reports persisted on the server."""
+    """List completed analysis history persisted on the server."""
     cap = max(1, min(limit, 500))
     return report_store.list_completed(cap)
 
 
+@app.get("/api/history/{task_id}")
 @app.get("/api/reports/{task_id}")
 async def get_stored_report(task_id: str):
-    """Return full JSON for a stored report."""
+    """Return full JSON for a stored history entry."""
     row = report_store.get_report(task_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Report not found")
     return row
 
 
+@app.get("/api/history/{task_id}/export")
 @app.get("/api/reports/{task_id}/export")
 async def export_professional_report(
     task_id: str,
@@ -807,9 +985,10 @@ async def export_professional_report(
     )
 
 
+@app.get("/api/history/{task_id}/download")
 @app.get("/api/reports/{task_id}/download")
 async def download_stored_report(task_id: str):
-    """Download stored report JSON as an attachment."""
+    """Download stored history JSON as an attachment."""
     row = report_store.get_report(task_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -829,9 +1008,10 @@ async def download_stored_report(task_id: str):
     )
 
 
+@app.delete("/api/history/{task_id}")
 @app.delete("/api/reports/{task_id}")
 async def delete_stored_report(task_id: str):
-    """Remove a stored report from the server database."""
+    """Remove a stored history entry from the server database."""
     deleted = report_store.delete_report(task_id)
     return {"deleted": deleted}
 

@@ -72,11 +72,17 @@ export interface TaskStatus {
   final_decision: {
     decision: string;
     signal: string;
+    dimension_confidence?: Record<string, number>;
   } | null;
   error_message: string | null;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+  messages?: Array<{
+    time?: string;
+    type?: string;
+    content?: string;
+  }>;
 }
 
 // API Functions
@@ -114,7 +120,7 @@ export const cancelTask = async (taskId: string) => {
   return response.data;
 };
 
-export interface StoredReportListItem {
+export interface StoredHistoryListItem {
   task_id: string;
   ticker: string;
   analysis_date: string;
@@ -125,25 +131,25 @@ export interface StoredReportListItem {
   signal?: string | null;
 }
 
-export const listStoredReports = async (limit = 200) => {
-  const response = await apiClient.get<StoredReportListItem[]>('/reports', {
+export const listStoredHistory = async (limit = 200) => {
+  const response = await apiClient.get<StoredHistoryListItem[]>('/history', {
     params: { limit },
   });
   return response.data;
 };
 
-export const getStoredReport = async (taskId: string) => {
-  const response = await apiClient.get<Record<string, unknown>>(`/reports/${taskId}`);
+export const getStoredHistory = async (taskId: string) => {
+  const response = await apiClient.get<Record<string, unknown>>(`/history/${taskId}`);
   return response.data;
 };
 
-export const deleteStoredReport = async (taskId: string) => {
-  const response = await apiClient.delete<{ deleted: boolean }>(`/reports/${taskId}`);
+export const deleteStoredHistory = async (taskId: string) => {
+  const response = await apiClient.delete<{ deleted: boolean }>(`/history/${taskId}`);
   return response.data;
 };
 
-/** Browser opens this URL to download server-built full report (CLI-aligned + optional LLM synthesis). */
-export function getProfessionalReportExportUrl(
+/** Browser opens this URL to download server-built full history export. */
+export function getProfessionalHistoryExportUrl(
   taskId: string,
   format: 'markdown' | 'pdf' | 'docx',
   options?: { enhanced?: boolean; refreshEnhancement?: boolean },
@@ -156,5 +162,12 @@ export function getProfessionalReportExportUrl(
   if (options?.refreshEnhancement) {
     params.set('refresh_enhancement', 'true');
   }
-  return `/api/reports/${encodeURIComponent(taskId)}/export?${params.toString()}`;
+  return `/api/history/${encodeURIComponent(taskId)}/export?${params.toString()}`;
 }
+
+// Backward-compatible aliases
+export type StoredReportListItem = StoredHistoryListItem;
+export const listStoredReports = listStoredHistory;
+export const getStoredReport = getStoredHistory;
+export const deleteStoredReport = deleteStoredHistory;
+export const getProfessionalReportExportUrl = getProfessionalHistoryExportUrl;

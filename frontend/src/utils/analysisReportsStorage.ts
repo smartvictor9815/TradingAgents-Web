@@ -113,8 +113,16 @@ export function upsertCompletedSnapshot(params: {
   analysisDate: string;
   decision: string;
   signal?: string;
+  dimensionConfidence?: Record<string, number>;
 }) {
-  const { decision, signal } = params;
+  const { decision, signal, dimensionConfidence } = params;
+  const vals = Object.values(dimensionConfidence || {}).filter(
+    (v): v is number => Number.isFinite(v),
+  );
+  const avgConfidence =
+    vals.length > 0
+      ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
+      : 50;
   upsertReport({
     id: params.taskId,
     ticker: params.ticker,
@@ -125,9 +133,10 @@ export function upsertCompletedSnapshot(params: {
     steps: [{ name: 'Result', status: 'completed', details: decision }],
     recommendation: {
       action: signalToAction(signal),
-      confidence: 50,
+      confidence: avgConfidence,
       reasoning: decision,
     },
+    agentConfidence: dimensionConfidence,
   });
 }
 

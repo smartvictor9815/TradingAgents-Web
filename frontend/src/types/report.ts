@@ -16,14 +16,7 @@ export interface Report {
     confidence: number;
     reasoning: string;
   };
-  agentConfidence?: {
-    analyst: number;
-    strategist: number;
-    riskAssessor: number;
-    trader: number;
-    sentiment: number;
-    technical: number;
-  };
+  agentConfidence?: Record<string, number>;
   priceData?: {
     date: string;
     price: number;

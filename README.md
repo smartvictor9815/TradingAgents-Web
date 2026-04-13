@@ -13,6 +13,11 @@ This repository is **derivative work** built on top of **[TradingAgents](https:/
 | **This fork** | [github.com/smartvictor9815/TradingAgents-Web](https://github.com/smartvictor9815/TradingAgents-Web) |
 | Original project | [github.com/TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) |
 
+## User feature guides
+
+- English: [`docs/WEB_FEATURE_GUIDE_EN.md`](docs/WEB_FEATURE_GUIDE_EN.md)
+- 中文: [`docs/WEB_FEATURE_GUIDE_ZH.md`](docs/WEB_FEATURE_GUIDE_ZH.md)
+
 ---
 
 ## Project layout

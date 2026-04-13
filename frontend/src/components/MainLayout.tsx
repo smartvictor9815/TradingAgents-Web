@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router";
-import { LayoutDashboard, Settings, Database, FileText, BarChart3, Menu, X } from "lucide-react";
+import { LayoutDashboard, Settings, Database, FileText, BarChart3, Menu, X, Github } from "lucide-react";
 import { Button } from "./ui/button";
 
 export function MainLayout() {
+  const repoUrl = "https://github.com/smartvictor9815/TradingAgents-Web";
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const menuItems = [
     { path: "/", label: "Analysis", icon: LayoutDashboard },
-    { path: "/reports", label: "Reports", icon: FileText },
+    { path: "/history", label: "History", icon: FileText },
     { path: "/settings", label: "Settings", icon: Settings },
     { path: "/providers", label: "Providers", icon: Database },
     { path: "/stats", label: "Statistics", icon: BarChart3 },
@@ -39,7 +40,7 @@ export function MainLayout() {
               TA
             </div>
             <div>
-              <h1 className="text-base font-semibold text-[#e6edf3]">TradingAgents</h1>
+              <h1 className="text-base font-semibold text-[#e6edf3]">Tradingagents-Web</h1>
               <p className="text-[10px] text-[#6e7681] hidden sm:block">Multi-Agent LLM Trading Framework</p>
             </div>
           </div>
@@ -47,6 +48,15 @@ export function MainLayout() {
         
         {/* Quick Stats in Header */}
         <div className="hidden md:flex items-center gap-4 text-xs">
+          <a
+            href={repoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#161b22] rounded border border-[#30363d] text-[#8b949e] hover:text-[#e6edf3] hover:border-[#8b949e] transition-colors"
+          >
+            <Github className="w-3.5 h-3.5" />
+            <span>GitHub</span>
+          </a>
           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#161b22] rounded border border-[#30363d]">
             <div className="w-1.5 h-1.5 bg-[#3fb950] rounded-full animate-pulse"></div>
             <span className="text-[#8b949e]">System Ready</span>
@@ -110,7 +120,17 @@ export function MainLayout() {
                 <div className="w-8 h-8 bg-gradient-to-br from-[#f85149] to-[#ffa657] rounded flex items-center justify-center text-white font-bold text-sm">
                   TA
                 </div>
-                <h1 className="text-base font-semibold text-[#e6edf3]">TradingAgents</h1>
+                <h1 className="text-base font-semibold text-[#e6edf3]">Tradingagents-Web</h1>
+                <a
+                  href={repoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#8b949e] hover:text-[#e6edf3] transition-colors"
+                  aria-label="Open GitHub repository"
+                  title="GitHub repository"
+                >
+                  <Github className="w-4 h-4" />
+                </a>
               </div>
               <button
                 onClick={() => setMobileMenuOpen(false)}

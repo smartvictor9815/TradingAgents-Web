@@ -18,7 +18,8 @@ import {
 import { toast } from "sonner";
 import { ExportMenuPortal } from "./ExportMenuPortal";
 import { RecommendationMarkdown } from "./RecommendationMarkdown";
-import { getProfessionalReportExportUrl } from "../api/client";
+import { getProfessionalHistoryExportUrl } from "../api/client";
+import { CustomRadarChart } from "./CustomRadarChart";
 import {
   upsertRunningReport,
   upsertCompletedSnapshot,
@@ -167,6 +168,7 @@ export function AnalysisPage() {
     return today.toISOString().split('T')[0];
   });
   const [, setConfig] = useState<SettingsConfig | null>(null);
+  const [nowSeconds, setNowSeconds] = useState(() => Date.now() / 1000);
 
   const loadProviders = (): ProviderConfig[] => {
     try {
@@ -263,6 +265,15 @@ export function AnalysisPage() {
     };
   }, [resumeFromLocalReport]);
 
+  useEffect(() => {
+    setNowSeconds(Date.now() / 1000);
+    if (!isAnalyzing) return;
+    const timer = window.setInterval(() => {
+      setNowSeconds(Date.now() / 1000);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isAnalyzing]);
+
   const lastUsageTaskIdRef = useRef<string | null>(null);
   const prevSessionUsageRef = useRef({ in: 0, out: 0, llm: 0 });
 
@@ -349,6 +360,7 @@ export function AnalysisPage() {
         analysisDate,
         decision: finalDecision.decision,
         signal: finalDecision.signal,
+        dimensionConfidence: finalDecision.dimensionConfidence,
       });
       return;
     }
@@ -449,7 +461,7 @@ export function AnalysisPage() {
     refreshEnhancement = false,
   ) {
     if (!taskId) {
-      toast.error("No task id — start an analysis or open Reports to export.");
+      toast.error("No task id — start an analysis or open History to export.");
       return;
     }
     const ext = format;
@@ -457,7 +469,7 @@ export function AnalysisPage() {
       /[/\\?%*:|"<>]/g,
       "-",
     );
-    const url = getProfessionalReportExportUrl(taskId, format, {
+    const url = getProfessionalHistoryExportUrl(taskId, format, {
       enhanced,
       refreshEnhancement,
     });
@@ -547,21 +559,54 @@ export function AnalysisPage() {
         badge:
           "border-[#3fb950]/35 bg-[#3fb950]/[0.08] text-[#3fb950] shadow-[inset_0_0_0_1px_rgba(63,185,80,0.12)]",
         bar: "border-l-[#3fb950]",
+        hero:
+          "border-[#30363d] bg-[#0d1117] text-[#e6edf3] shadow-[inset_0_0_0_1px_rgba(63,185,80,0.16)]",
+        heroAccent: "text-[#3fb950]",
       }
     : finalSignalLc.includes("sell")
       ? {
           badge:
             "border-[#f85149]/35 bg-[#f85149]/[0.08] text-[#f85149] shadow-[inset_0_0_0_1px_rgba(248,81,73,0.12)]",
           bar: "border-l-[#f85149]",
+          hero:
+            "border-[#30363d] bg-[#0d1117] text-[#e6edf3] shadow-[inset_0_0_0_1px_rgba(248,81,73,0.18)]",
+          heroAccent: "text-[#f85149]",
         }
       : {
           badge:
             "border-[#ffa657]/35 bg-[#ffa657]/[0.08] text-[#ffa657] shadow-[inset_0_0_0_1px_rgba(255,166,87,0.12)]",
           bar: "border-l-[#ffa657]",
+          hero:
+            "border-[#30363d] bg-[#0d1117] text-[#e6edf3] shadow-[inset_0_0_0_1px_rgba(255,166,87,0.18)]",
+          heroAccent: "text-[#ffa657]",
         };
+  const dimensionConfidenceEntries = Object.entries(
+    finalDecision?.dimensionConfidence || {},
+  ).filter(([, val]) => Number.isFinite(val));
+  const confidenceRadarMap = Object.fromEntries(
+    dimensionConfidenceEntries.map(([k, v]) => [
+      k,
+      Math.max(0, Math.min(100, Math.round(Number(v)))),
+    ]),
+  );
+  const averageConfidence =
+    dimensionConfidenceEntries.length > 0
+      ? Math.round(
+          dimensionConfidenceEntries.reduce((acc, [, v]) => acc + Number(v), 0) /
+            dimensionConfidenceEntries.length,
+        )
+      : null;
 
   /** Show export whenever a run has finished or stopped (not only when finalDecision is present). */
   const canExport = hasStarted && !isAnalyzing;
+  const elapsedSeconds = (() => {
+    if (!stats.startTime) return 0;
+    const end = isAnalyzing ? nowSeconds : (stats.endTime ?? stats.startTime);
+    return Math.max(0, Math.floor(end - stats.startTime));
+  })();
+  const elapsedDisplay = `${Math.floor(elapsedSeconds / 60)
+    .toString()
+    .padStart(2, "0")}:${(elapsedSeconds % 60).toString().padStart(2, "0")}`;
 
   const logScrollRef = useRef<HTMLDivElement>(null);
 
@@ -653,8 +698,8 @@ export function AnalysisPage() {
             {canExport && (
               <AnalysisInlineExportMenu
                 taskId={taskId}
-                onServerPdf={() => void downloadProfessionalExport("pdf", true, false)}
-                onServerDocx={() => void downloadProfessionalExport("docx", true, false)}
+                onServerPdf={() => void downloadProfessionalExport("pdf", false, false)}
+                onServerDocx={() => void downloadProfessionalExport("docx", false, false)}
               />
             )}
           </div>
@@ -742,9 +787,7 @@ export function AnalysisPage() {
                           [{msg.type}]
                         </div>
                         <div className="flex-1 break-words text-[#e6edf3] ml-3 leading-relaxed">
-                          {msg.content.length > 100 
-                            ? `${msg.content.substring(0, 97)}...` 
-                            : msg.content}
+                          {msg.content}
                         </div>
                       </div>
                     ))}
@@ -762,45 +805,85 @@ export function AnalysisPage() {
 
           {/* Analysis Results - Shown when complete */}
           {finalDecision && (
-            <div className="bg-[#161b22] border border-[#30363d] rounded-lg overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex flex-col gap-3 border-b border-[#30363d] bg-[#0d1117]/35 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#f85149]/30 bg-[#f85149]/[0.12]">
-                    <Target className="h-5 w-5 text-[#f85149]" aria-hidden />
+            <div className="animate-in slide-in-from-bottom-3 fade-in duration-500 rounded-xl border border-[#30363d] bg-[#161b22] shadow-[0_8px_28px_rgba(0,0,0,0.35)]">
+              <div className="border-b border-[#30363d] bg-gradient-to-r from-[#0d1117] via-[#121821] to-[#0d1117] px-4 py-4 md:px-5">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#f85149]/30 bg-[#f85149]/[0.12]">
+                      <Target className="h-5 w-5 text-[#f85149]" aria-hidden />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-semibold leading-tight text-[#e6edf3] md:text-base">
+                        Investment Recommendation
+                      </h2>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[#8b949e]">
+                        <span className="rounded border border-[#30363d] bg-[#0d1117] px-2 py-0.5 font-mono">
+                          {ticker.trim() || "—"}
+                        </span>
+                        <span className="text-[#484f58]">•</span>
+                        <span>{analysisDate}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="min-w-0 pt-0.5">
-                    <h2 className="text-sm font-semibold leading-tight text-[#e6edf3]">
-                      Investment Recommendation
-                    </h2>
-                    <p className="mt-0.5 text-[11px] text-[#6e7681]">
-                      <span className="font-mono text-[#8b949e]">{ticker.trim() || "—"}</span>
-                      <span className="mx-1.5 text-[#484f58]">·</span>
-                      <span>{analysisDate}</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 flex-col items-stretch gap-1 sm:items-end">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6e7681]">
-                    Signal
-                  </span>
-                  <span
-                    className={`inline-flex items-center justify-center rounded-lg border px-4 py-2 text-center text-sm font-bold leading-none tracking-wide sm:min-w-[7.5rem] ${recommendationUi.badge}`}
-                  >
-                    {finalDecision.signal ?? "—"}
-                  </span>
                 </div>
               </div>
+
               <div className="p-4 md:p-5">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#6e7681]">
-                  Rationale
-                </p>
-                <div
-                  className={`rounded-md border border-[#30363d] border-l-4 bg-[#0d1117] py-4 pl-4 pr-4 md:py-5 md:pl-5 md:pr-5 ${recommendationUi.bar}`}
-                >
-                  <RecommendationMarkdown
-                    className="[word-break:break-word]"
-                    markdown={finalDecision.decision ?? ""}
-                  />
+                <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+                  <aside className="space-y-3">
+                    <div className="rounded-lg border border-[#30363d] bg-[#0d1117] p-3">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8b949e]">
+                        Decision & Confidence
+                      </p>
+                      <div className={`rounded-xl border px-3 py-3 md:px-4 md:py-3 ${recommendationUi.hero}`}>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8b949e]">
+                          Final Action
+                        </p>
+                        <div className="mt-1 flex items-end justify-between gap-3">
+                          <p className={`text-2xl font-extrabold leading-none tracking-wide md:text-3xl ${recommendationUi.heroAccent}`}>
+                            {String(finalDecision.signal ?? "—").toUpperCase()}
+                          </p>
+                          <div className="text-right text-[11px] text-[#8b949e]">
+                            <p>Primary recommendation</p>
+                            {averageConfidence !== null && (
+                              <div className="mt-1 inline-flex items-center gap-1 rounded-md border border-[#ffa657]/40 bg-[#ffa657]/10 px-2 py-0.5">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-[#ffa657]">
+                                  Avg confidence
+                                </span>
+                                <span className="text-sm font-extrabold leading-none text-[#ffd8a8]">
+                                  {averageConfidence}%
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {dimensionConfidenceEntries.length > 0 && (
+                        <div className="mt-3">
+                          <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#6e7681]">
+                            Confidence Radar
+                          </p>
+                          <div className="rounded-md border border-[#30363d]/70 bg-[#111823] p-2">
+                            <CustomRadarChart data={confidenceRadarMap} compact />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </aside>
+
+                  <section>
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#6e7681]">
+                      Rationale
+                    </p>
+                    <div
+                      className={`rounded-lg border border-[#30363d] border-l-4 bg-[#0d1117] px-4 py-4 md:px-5 md:py-5 ${recommendationUi.bar}`}
+                    >
+                      <RecommendationMarkdown
+                        className="[word-break:break-word] md:prose-base"
+                        markdown={finalDecision.decision ?? ""}
+                      />
+                    </div>
+                  </section>
                 </div>
               </div>
             </div>
@@ -825,9 +908,7 @@ export function AnalysisPage() {
                 {isAnalyzing ? "Analyzing Performance..." : "Process Finished"}
               </span>
               <div className="bg-[#0a0e14] px-3 py-1 rounded border border-[#30363d] font-mono text-[#ffa657]">
-                {stats.startTime 
-                  ? `${Math.floor((Date.now() / 1000 - stats.startTime) / 60).toString().padStart(2, '0')}:${Math.floor((Date.now() / 1000 - stats.startTime) % 60).toString().padStart(2, '0')}`
-                  : "00:00"}
+                {elapsedDisplay}
               </div>
             </div>
           </div>

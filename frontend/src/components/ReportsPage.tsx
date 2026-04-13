@@ -12,11 +12,11 @@ import {
   signalToAction,
 } from "../utils/analysisReportsStorage";
 import {
-  listStoredReports,
-  getStoredReport,
-  deleteStoredReport,
-  getProfessionalReportExportUrl,
-  type StoredReportListItem,
+  listStoredHistory,
+  getStoredHistory,
+  deleteStoredHistory,
+  getProfessionalHistoryExportUrl,
+  type StoredHistoryListItem,
 } from "../api/client";
 import { ExportMenuPortal } from "./ExportMenuPortal";
 
@@ -98,7 +98,7 @@ function ReportExportMenu({
             onClick={() =>
               pick(() => {
                 if (serverDisabled) return;
-                void triggerServerFullExport(report, "pdf", true, false);
+                void triggerServerFullExport(report, "pdf", false, false);
               })
             }
           >
@@ -114,7 +114,7 @@ function ReportExportMenu({
             onClick={() =>
               pick(() => {
                 if (serverDisabled) return;
-                void triggerServerFullExport(report, "docx", true, false);
+                void triggerServerFullExport(report, "docx", false, false);
               })
             }
           >
@@ -142,7 +142,7 @@ function mergeReportLists(local: Report[], server: Report[]): Report[] {
   );
 }
 
-function serverListItemToReport(item: StoredReportListItem): Report {
+function serverListItemToReport(item: StoredHistoryListItem): Report {
   const summary = item.summary_preview || "";
   const signal = item.signal ?? undefined;
   return {
@@ -174,6 +174,15 @@ function fullServerJsonToReport(json: Record<string, unknown>): Report {
   const fd = (json.results || {}) as Record<string, unknown>;
   const decision = typeof fd.decision === "string" ? fd.decision : "";
   const signal = typeof fd.signal === "string" ? fd.signal : undefined;
+  const dimensionConfidence =
+    fd.dimension_confidence && typeof fd.dimension_confidence === "object"
+      ? (fd.dimension_confidence as Record<string, number>)
+      : undefined;
+  const dcVals = Object.values(dimensionConfidence || {}).filter(
+    (v): v is number => Number.isFinite(v),
+  );
+  const confidenceAvg =
+    dcVals.length > 0 ? Math.round(dcVals.reduce((a, b) => a + b, 0) / dcVals.length) : 50;
   const statusRaw = String(json.status || "").toLowerCase();
   const status: Report["status"] =
     statusRaw === "completed"
@@ -214,10 +223,11 @@ function fullServerJsonToReport(json: Record<string, unknown>): Report {
     recommendation: decision
       ? {
           action: signalToAction(signal),
-          confidence: 50,
+          confidence: confidenceAvg,
           reasoning: decision,
         }
       : undefined,
+    agentConfidence: dimensionConfidence,
   };
 }
 
@@ -232,7 +242,7 @@ export function ReportsPage() {
   const loadReports = async () => {
     const local = loadReportsFromStorage();
     try {
-      const serverItems = await listStoredReports();
+      const serverItems = await listStoredHistory();
       const server = serverItems.map(serverListItemToReport);
       const merged = mergeReportLists(local, server);
       setReports(merged);
@@ -244,7 +254,7 @@ export function ReportsPage() {
 
   const openReport = async (report: Report) => {
     try {
-      const data = await getStoredReport(report.id);
+      const data = await getStoredHistory(report.id);
       if (data && typeof data === "object") {
         setSelectedReport(fullServerJsonToReport(data));
         return;
@@ -257,7 +267,7 @@ export function ReportsPage() {
 
   const deleteReport = async (id: string) => {
     try {
-      await deleteStoredReport(id);
+      await deleteStoredHistory(id);
     } catch {
       /* still drop local copy */
     }
@@ -268,7 +278,7 @@ export function ReportsPage() {
     if (selectedReport?.id === id) {
       setSelectedReport(null);
     }
-    toast.success("Report deleted successfully");
+    toast.success("History entry deleted successfully");
   };
 
   const triggerServerFullExport = async (
@@ -281,7 +291,7 @@ export function ReportsPage() {
       toast.error("Export is only available for completed analyses.");
       return;
     }
-    const url = getProfessionalReportExportUrl(report.id, format, {
+    const url = getProfessionalHistoryExportUrl(report.id, format, {
       enhanced,
       refreshEnhancement,
     });
@@ -327,8 +337,8 @@ export function ReportsPage() {
       URL.revokeObjectURL(objectUrl);
       toast.success(
         enhanced
-          ? "Report downloaded (full report + AI synthesis)"
-          : "Report downloaded",
+          ? "History export downloaded (full report + AI synthesis)"
+          : "History export downloaded",
       );
     } catch (e) {
       console.error(e);
@@ -359,7 +369,7 @@ export function ReportsPage() {
             className="text-[#ffa657] hover:text-[#ffb86c] hover:bg-[#ffa657]/10 mb-3 -ml-2 h-8 text-xs"
           >
             <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
-            Back to Reports
+            Back to History
           </Button>
           
           <div className="flex items-start justify-between">
@@ -386,7 +396,7 @@ export function ReportsPage() {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  if (confirm(`Delete report for ${selectedReport.ticker}?`)) {
+                  if (confirm(`Delete history entry for ${selectedReport.ticker}?`)) {
                     deleteReport(selectedReport.id);
                   }
                 }}
@@ -596,18 +606,18 @@ export function ReportsPage() {
       <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-4">
         <h1 className="text-xl text-[#e6edf3] font-semibold flex items-center gap-2.5">
           <FileText className="w-6 h-6 text-[#f85149]" />
-          Analysis Reports
+          Analysis History
         </h1>
-        <p className="text-xs text-[#8b949e] mt-0.5">View and manage completed analysis reports</p>
+        <p className="text-xs text-[#8b949e] mt-0.5">View and manage completed analysis history</p>
       </div>
 
-      {/* Reports List */}
+      {/* History List */}
       {reports.length === 0 ? (
         <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-12 text-center">
           <FileText className="w-12 h-12 text-[#6e7681] mx-auto mb-3" />
-          <p className="text-[#8b949e] text-sm mb-1">No reports yet</p>
+          <p className="text-[#8b949e] text-sm mb-1">No history yet</p>
           <p className="text-[#6e7681] text-xs">
-            Complete an analysis to generate your first report
+            Complete an analysis to generate your first history entry
           </p>
         </div>
       ) : (
@@ -664,7 +674,7 @@ export function ReportsPage() {
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm(`Delete report for ${report.ticker}?`)) {
+                      if (confirm(`Delete history entry for ${report.ticker}?`)) {
                         deleteReport(report.id);
                       }
                     }}

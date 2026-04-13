@@ -39,11 +39,33 @@ def create_portfolio_manager(llm, memory):
 - Research Manager's investment plan: **{research_plan}**
 - Trader's transaction proposal: **{trader_plan}**
 - Lessons from past decisions: **{past_memory_str}**
+- Analyst reports (market / sentiment / news / fundamentals) include a `## Confidence`
+  block with `confidence_score` hints. Use those hints as priors, then calibrate by
+  cross-checking consistency, evidence quality, and conflict severity.
 
-**Required Output Structure:**
-1. **Rating**: State one of Buy / Overweight / Hold / Underweight / Sell.
-2. **Executive Summary**: A concise action plan covering entry strategy, position sizing, key risk levels, and time horizon.
-3. **Investment Thesis**: Detailed reasoning anchored in the analysts' debate and past reflections.
+**Required Output Format (STRICT JSON ONLY, no extra text):**
+{{
+  "rating": "Buy | Overweight | Hold | Underweight | Sell",
+  "executive_summary": "A concise action plan covering entry, sizing, risk levels, and horizon.",
+  "investment_thesis": "Detailed reasoning anchored in debate evidence and past reflections.",
+  "dimension_confidence": {{
+    "market": 0-100,
+    "sentiment": 0-100,
+    "news": 0-100,
+    "fundamentals": 0-100,
+    "research": 0-100,
+    "risk": 0-100
+  }}
+}}
+
+Rules:
+- `dimension_confidence` values must be integers between 0 and 100.
+- Use all six keys exactly as listed.
+- Keep JSON valid and parseable by `json.loads`.
+- Do not wrap JSON in markdown code fences.
+- For market/sentiment/news/fundamentals: start from analyst confidence hints and adjust
+  up/down based on evidence strength and contradictions.
+- For research/risk: infer from debate quality, argument consistency, and risk controls.
 
 ---
 

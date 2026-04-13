@@ -22,8 +22,12 @@ export const router = createBrowserRouter([
         Component: AnalysisPage,
       },
       {
-        path: "reports",
+        path: "history",
         Component: ReportsPage,
+      },
+      {
+        path: "reports",
+        element: <Navigate to="/history" replace />,
       },
       {
         path: "stats",
