@@ -5,14 +5,14 @@ set -euo pipefail
 # Usage:
 #   bash scripts/start_services.sh
 # Optional env:
-#   API_HOST=127.0.0.1 API_PORT=18000 FRONTEND_HOST=127.0.0.1 FRONTEND_PORT=3000 bash scripts/start_services.sh
+#   API_HOST=127.0.0.1 API_PORT=18000 FRONTEND_HOST=0.0.0.0 FRONTEND_PORT=3000 bash scripts/start_services.sh
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-18000}"
-FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
+FRONTEND_HOST="${FRONTEND_HOST:-0.0.0.0}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 
 RUN_DIR="$ROOT_DIR/.run"

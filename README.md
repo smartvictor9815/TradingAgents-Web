@@ -227,7 +227,7 @@ bash scripts/status_services.sh
 Optional custom ports/hosts when starting:
 
 ```bash
-API_PORT=18000 FRONTEND_PORT=3000 bash scripts/start_services.sh
+API_HOST=127.0.0.1 API_PORT=18000 FRONTEND_HOST=0.0.0.0 FRONTEND_PORT=3000 bash scripts/start_services.sh
 ```
 
 ### 5. Production-style frontend build

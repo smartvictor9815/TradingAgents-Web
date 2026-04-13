@@ -33,16 +33,37 @@ node_major() {
 }
 
 ensure_python_venv_support() {
-  # Quick probe: can this interpreter create a venv?
-  set +e
-  "$PYTHON_BIN" -m venv --help >/dev/null 2>&1
+  # Real probe: can this interpreter create a venv with ensurepip enabled?
+  can_create_temp_venv() {
+    local probe_dir
+    probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/ta-venv-probe.XXXXXX")"
+    set +e
+    "$PYTHON_BIN" -m venv "$probe_dir" >/dev/null 2>&1
+    local rc=$?
+    set -e
+    rm -rf "$probe_dir"
+    return "$rc"
+  }
+
+  can_create_temp_venv
   local has_venv=$?
-  set -e
   if [[ "$has_venv" -eq 0 ]]; then
     return 0
   fi
 
-  echo "==> Python venv module missing. Attempting auto-install..."
+  # Secondary signal for clearer logs.
+  set +e
+  "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import ensurepip  # noqa: F401
+PY
+  local has_ensurepip=$?
+  set -e
+
+  if [[ "$has_ensurepip" -ne 0 ]]; then
+    echo "==> Python ensurepip/venv support missing. Attempting auto-install..."
+  else
+    echo "==> Python venv creation probe failed. Attempting auto-install..."
+  fi
   if [[ ! -f "/etc/os-release" ]]; then
     echo "ERROR: Cannot auto-install python venv support on this OS."
     echo "Please install python3-venv manually, then rerun."
@@ -83,7 +104,7 @@ PY
   fi
 
   set +e
-  "$PYTHON_BIN" -m venv --help >/dev/null 2>&1
+  can_create_temp_venv
   has_venv=$?
   set -e
   if [[ "$has_venv" -ne 0 ]]; then
