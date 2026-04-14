@@ -45,8 +45,10 @@ ensure_python_venv_support() {
     return "$rc"
   }
 
-  can_create_temp_venv
-  local has_venv=$?
+  local has_venv=1
+  if can_create_temp_venv; then
+    has_venv=0
+  fi
   if [[ "$has_venv" -eq 0 ]]; then
     return 0
   fi
