@@ -206,6 +206,41 @@ function extractMessagesFromStoredReport(raw: unknown): AnalysisState['messages'
   return normalizeMessages(obj.messages);
 }
 
+function extractFinalDecisionFromStoredReport(
+  raw: unknown,
+): AnalysisState['finalDecision'] {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const candidate =
+    (obj.final_decision && typeof obj.final_decision === 'object'
+      ? obj.final_decision
+      : obj.results && typeof obj.results === 'object'
+        ? obj.results
+        : null) as Record<string, unknown> | null;
+  if (!candidate) return null;
+
+  const decision =
+    typeof candidate.decision === 'string' ? candidate.decision : '';
+  const signal =
+    typeof candidate.signal === 'string' ? candidate.signal : 'neutral';
+  const dimensionConfidenceRaw =
+    candidate.dimension_confidence ?? candidate.dimensionConfidence;
+  const dimensionConfidence =
+    dimensionConfidenceRaw && typeof dimensionConfidenceRaw === 'object'
+      ? (dimensionConfidenceRaw as Record<string, number>)
+      : undefined;
+  if (!decision && !dimensionConfidence) return null;
+  return { decision, signal, dimensionConfidence };
+}
+
+function normalizeStoredStatus(raw: unknown): 'running' | 'completed' | 'error' | 'cancelled' {
+  const v = String(raw ?? '').toLowerCase();
+  if (v === 'running' || v === 'pending') return 'running';
+  if (v === 'error' || v === 'failed') return 'error';
+  if (v === 'cancelled' || v === 'canceled') return 'cancelled';
+  return 'completed';
+}
+
 function toEpochSeconds(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -840,9 +875,88 @@ export function useAnalysis() {
       id: string;
       ticker: string;
       analysisDate: string;
+      status?: 'running' | 'completed' | 'failed';
     }): Promise<ResumeFromStorageResult> => {
       seenEventIds.current.clear();
       try {
+        // Fast path: non-running tasks can be restored directly from persisted history,
+        // avoiding an extra /task call (which may 404 after backend restarts).
+        if (report.status && report.status !== 'running') {
+          try {
+            const stored = await getStoredHistory(report.id);
+            if (stored && typeof stored === 'object') {
+              const row = stored as Record<string, unknown>;
+              const ticker =
+                typeof row.ticker === 'string' && row.ticker.trim()
+                  ? row.ticker
+                  : report.ticker;
+              const analysisDate =
+                typeof row.analysis_date === 'string' && row.analysis_date.trim()
+                  ? row.analysis_date
+                  : typeof row.analysisDate === 'string' && row.analysisDate.trim()
+                    ? row.analysisDate
+                    : report.analysisDate;
+              const status = normalizeStoredStatus(row.status);
+              const storedMessages = extractMessagesFromStoredReport(row);
+              const finalDecision = extractFinalDecisionFromStoredReport(row);
+
+              const cfg = row.configuration as Record<string, unknown> | undefined;
+              const analystsRaw = cfg?.analyst_agent ?? cfg?.analysts;
+              const analysts =
+                Array.isArray(analystsRaw) && analystsRaw.every((x) => typeof x === 'string')
+                  ? (analystsRaw as string[])
+                  : undefined;
+              const request: AnalysisRequest = {
+                ticker,
+                analysis_date: analysisDate,
+              };
+              if (analysts?.length) {
+                request.runtime = {
+                  llm_provider: String(cfg?.llm_provider ?? ''),
+                  selected_analysts: analysts,
+                };
+              }
+
+              let teams = buildInitialTeams(request);
+              if (status !== 'running') {
+                teams = teamsWithUniformAgentStatus(teams, 'completed');
+              }
+              const startTime =
+                toEpochSeconds(row.started_at) ??
+                toEpochSeconds(row.created_at) ??
+                null;
+              const endTime =
+                toEpochSeconds(row.completed_at) ??
+                (status === 'running' ? null : startTime);
+              const errMsg =
+                typeof row.error_message === 'string' ? row.error_message : null;
+
+              setAnalysisState({
+                isAnalyzing: false,
+                hasStarted: true,
+                taskId: report.id,
+                teams,
+                messages: storedMessages,
+                finalDecision: status === 'completed' ? finalDecision : null,
+                error: status === 'error' ? errMsg || 'Analysis failed' : null,
+                currentReport: '',
+                reportCount: '0/7',
+                stats: {
+                  llmCalls: 0,
+                  toolCalls: 0,
+                  tokensIn: 0,
+                  tokensOut: 0,
+                  startTime,
+                  endTime,
+                },
+              });
+              return { ok: true, ticker, analysisDate };
+            }
+          } catch {
+            // fallback to /task path
+          }
+        }
+
         const status = await getTaskStatus(report.id);
         const statusMessages = normalizeMessages(status.messages);
         let storedMessages: AnalysisState['messages'] = [];
@@ -1038,6 +1152,79 @@ export function useAnalysis() {
             ? (e as { response?: { status?: number } }).response?.status
             : undefined;
         if (httpStatus === 404) {
+          try {
+            const stored = await getStoredHistory(report.id);
+            if (stored && typeof stored === 'object') {
+              const row = stored as Record<string, unknown>;
+              const ticker =
+                typeof row.ticker === 'string' && row.ticker.trim()
+                  ? row.ticker
+                  : report.ticker;
+              const analysisDate =
+                typeof row.analysis_date === 'string' && row.analysis_date.trim()
+                  ? row.analysis_date
+                  : typeof row.analysisDate === 'string' && row.analysisDate.trim()
+                    ? row.analysisDate
+                    : report.analysisDate;
+              const status = normalizeStoredStatus(row.status);
+              const storedMessages = extractMessagesFromStoredReport(row);
+              const finalDecision = extractFinalDecisionFromStoredReport(row);
+
+              const cfg = row.configuration as Record<string, unknown> | undefined;
+              const analystsRaw = cfg?.analyst_agent ?? cfg?.analysts;
+              const analysts =
+                Array.isArray(analystsRaw) && analystsRaw.every((x) => typeof x === 'string')
+                  ? (analystsRaw as string[])
+                  : undefined;
+              const request: AnalysisRequest = {
+                ticker,
+                analysis_date: analysisDate,
+              };
+              if (analysts?.length) {
+                request.runtime = {
+                  llm_provider: String(cfg?.llm_provider ?? ''),
+                  selected_analysts: analysts,
+                };
+              }
+
+              let teams = buildInitialTeams(request);
+              if (status !== 'running') {
+                teams = teamsWithUniformAgentStatus(teams, 'completed');
+              }
+              const startTime =
+                toEpochSeconds(row.started_at) ??
+                toEpochSeconds(row.created_at) ??
+                null;
+              const endTime =
+                toEpochSeconds(row.completed_at) ??
+                (status === 'running' ? null : startTime);
+              const errMsg =
+                typeof row.error_message === 'string' ? row.error_message : null;
+
+              setAnalysisState({
+                isAnalyzing: false,
+                hasStarted: true,
+                taskId: report.id,
+                teams,
+                messages: storedMessages,
+                finalDecision: status === 'completed' ? finalDecision : null,
+                error: status === 'error' ? errMsg || 'Analysis failed' : null,
+                currentReport: '',
+                reportCount: '0/7',
+                stats: {
+                  llmCalls: 0,
+                  toolCalls: 0,
+                  tokensIn: 0,
+                  tokensOut: 0,
+                  startTime,
+                  endTime,
+                },
+              });
+              return { ok: true, ticker, analysisDate };
+            }
+          } catch {
+            // no-op: fallback to local failure snapshot below
+          }
           upsertFailedSnapshot({
             taskId: report.id,
             ticker: report.ticker,

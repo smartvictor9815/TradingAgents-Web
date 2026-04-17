@@ -13,6 +13,7 @@ import json
 import os
 import urllib.parse
 import re
+import socket
 import requests
 from typing import Dict, Any, Optional, List
 
@@ -564,6 +565,84 @@ def _mask_secret_in_text(text: str, secret: Optional[str]) -> str:
     return text.replace(s, "***")
 
 
+def _flatten_exception_messages(exc: BaseException) -> List[str]:
+    """Collect useful messages from exception/cause/context/group chain."""
+    out: List[str] = []
+    queue: List[BaseException] = [exc]
+    seen: set[int] = set()
+
+    while queue:
+        cur = queue.pop(0)
+        cur_id = id(cur)
+        if cur_id in seen:
+            continue
+        seen.add(cur_id)
+
+        msg = str(cur).strip()
+        name = type(cur).__name__
+        out.append(f"{name}: {msg}" if msg else name)
+
+        cause = getattr(cur, "__cause__", None)
+        if isinstance(cause, BaseException):
+            queue.append(cause)
+        context = getattr(cur, "__context__", None)
+        if isinstance(context, BaseException):
+            queue.append(context)
+        if type(cur).__name__ == "ExceptionGroup":
+            for sub in getattr(cur, "exceptions", ()) or ():
+                if isinstance(sub, BaseException):
+                    queue.append(sub)
+
+    # Keep order while removing duplicates.
+    deduped: List[str] = []
+    seen_msg: set[str] = set()
+    for item in out:
+        if item in seen_msg:
+            continue
+        deduped.append(item)
+        seen_msg.add(item)
+    return deduped
+
+
+def _probe_provider_endpoint(base_url: str, timeout_sec: float = 5.0) -> Optional[str]:
+    """
+    Best-effort host/port probe to disambiguate generic SDK "Connection error".
+    Returns a user-facing hint when a concrete network-layer issue is detected.
+    """
+    raw = (base_url or "").strip()
+    if not raw:
+        return None
+
+    try:
+        parsed = urllib.parse.urlparse(raw)
+    except Exception:
+        return "Base URL format is invalid"
+
+    host = parsed.hostname
+    if not host:
+        return "Base URL format is invalid"
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme.lower() == "https" else 80
+
+    try:
+        socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return "Cannot resolve provider host - check the Base URL domain"
+    except OSError:
+        return "Cannot resolve provider host - check DNS/network settings"
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout_sec):
+            pass
+    except TimeoutError:
+        return "Provider endpoint connection timed out - check network/firewall"
+    except OSError:
+        return "Connection refused by provider endpoint - check host/port"
+
+    return None
+
+
 def _alpha_vantage_key_format_error(key: str) -> Optional[str]:
     """
     Alpha Vantage assigns 16-character alphanumeric keys. Their quote endpoints currently
@@ -848,11 +927,8 @@ async def test_provider(request: ProviderTestRequest):
         # ExceptionGroup (Py3.11+) is BaseException, not Exception; if uncaught it becomes HTTP 500.
         if not isinstance(e, Exception) and type(e).__name__ != "ExceptionGroup":
             raise
-        if type(e).__name__ == "ExceptionGroup":
-            excs = getattr(e, "exceptions", ())
-            error_msg = "; ".join(str(x) for x in excs) if excs else str(e)
-        else:
-            error_msg = str(e)
+        chain_messages = _flatten_exception_messages(e)
+        error_msg = "; ".join(chain_messages) if chain_messages else str(e)
         error_msg = _mask_secret_in_text(error_msg, request.apiKey)
         _log.warning(
             "Provider test failed (provider=%s model=%s base_url=%s): %s",
@@ -863,6 +939,9 @@ async def test_provider(request: ProviderTestRequest):
             exc_info=isinstance(e, Exception),
         )
         el = error_msg.lower()
+        connectivity_hint = None
+        if "connection error" in el or "apiconnectionerror" in el:
+            connectivity_hint = _probe_provider_endpoint(request.baseUrl)
         if "authentication" in el or "api key" in el or "unauthorized" in el or "invalid key" in el:
             error_msg = "Invalid API key"
         elif re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", el):
@@ -883,8 +962,12 @@ async def test_provider(request: ProviderTestRequest):
             error_msg = "Provider request timed out - check network or endpoint availability"
         elif "ssl" in el or "certificate" in el:
             error_msg = "TLS/SSL handshake failed - check endpoint certificate or proxy settings"
+        elif connectivity_hint:
+            error_msg = connectivity_hint
         elif "connection" in el:
             error_msg = "Cannot connect to provider endpoint - check Base URL and network"
+        elif "error" in el and "api connection" in el:
+            error_msg = "Provider endpoint is reachable, but request failed - check API key/model or proxy settings"
         return {"success": False, "error": error_msg[:200]}
 
 @app.get("/api/history")

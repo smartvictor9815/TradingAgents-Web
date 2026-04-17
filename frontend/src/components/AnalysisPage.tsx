@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -15,6 +16,8 @@ import {
   XCircle,
   Target,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { ExportMenuPortal } from "./ExportMenuPortal";
 import { RecommendationMarkdown } from "./RecommendationMarkdown";
@@ -55,6 +58,15 @@ interface SettingsConfig {
   alphaVantageApiKey?: string;
   dataVendors?: Record<DataVendorKey, DataVendorValue>;
 }
+
+type AnalysisRouteState = {
+  resumeHint?: {
+    id: string;
+    ticker: string;
+    analysisDate: string;
+    status?: "running" | "completed" | "failed";
+  };
+};
 
 const DEFAULT_SETTINGS: SettingsConfig = {
   outputLanguage: "english",
@@ -161,12 +173,24 @@ function AnalysisInlineExportMenu({
   );
 }
 
+function AnalysisLogMarkdown({ markdown }: { markdown: string }) {
+  const md = markdown?.trim() ?? "";
+  if (!md) return null;
+  return (
+    <div className="prose prose-invert prose-sm max-w-none text-[#e6edf3] prose-p:my-1 prose-headings:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-pre:bg-[#0d1117] prose-pre:border prose-pre:border-[#30363d] prose-code:text-[#ffa657] prose-code:before:content-none prose-code:after:content-none prose-a:text-[#58a6ff]">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
+    </div>
+  );
+}
+
 export function AnalysisPage() {
+  const location = useLocation();
   const [ticker, setTicker] = useState("");
   const [analysisDate, setAnalysisDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
+  const [isRestoringRecent, setIsRestoringRecent] = useState(false);
   const [, setConfig] = useState<SettingsConfig | null>(null);
   const [nowSeconds, setNowSeconds] = useState(() => Date.now() / 1000);
 
@@ -231,6 +255,8 @@ export function AnalysisPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const routeState = location.state as AnalysisRouteState | null;
+    const hint = routeState?.resumeHint;
     try {
       if (sessionStorage.getItem(SKIP_ANALYSIS_RESUME_ONCE_KEY) === "1") {
         sessionStorage.removeItem(SKIP_ANALYSIS_RESUME_ONCE_KEY);
@@ -240,15 +266,22 @@ export function AnalysisPage() {
       /* private mode */
     }
 
-    const recent = getMostRecentReport();
+    const recent = hint ?? getMostRecentReport();
     if (!recent?.id) return;
+    setTicker(recent.ticker || "");
+    if (recent.analysisDate) {
+      setAnalysisDate(recent.analysisDate);
+    }
+    setIsRestoringRecent(true);
 
     void (async () => {
       const r = await resumeFromLocalReport({
         id: recent.id,
         ticker: recent.ticker,
         analysisDate: recent.analysisDate,
+        status: recent.status,
       });
+      setIsRestoringRecent(false);
       if (cancelled || !r.ok) return;
       setTicker(r.ticker);
       setAnalysisDate(r.analysisDate);
@@ -262,8 +295,9 @@ export function AnalysisPage() {
 
     return () => {
       cancelled = true;
+      setIsRestoringRecent(false);
     };
-  }, [resumeFromLocalReport]);
+  }, [resumeFromLocalReport, location.state]);
 
   useEffect(() => {
     setNowSeconds(Date.now() / 1000);
@@ -704,6 +738,11 @@ export function AnalysisPage() {
             )}
           </div>
         </div>
+        {isRestoringRecent && !hasStarted && (
+          <div className="mt-2 rounded border border-[#30363d] bg-[#0d1117] px-3 py-2 text-xs text-[#8b949e]">
+            Restoring latest analysis…
+          </div>
+        )}
       </div>
 
       {hasStarted && (
@@ -787,7 +826,7 @@ export function AnalysisPage() {
                           [{msg.type}]
                         </div>
                         <div className="flex-1 break-words text-[#e6edf3] ml-3 leading-relaxed">
-                          {msg.content}
+                          <AnalysisLogMarkdown markdown={msg.content} />
                         </div>
                       </div>
                     ))}

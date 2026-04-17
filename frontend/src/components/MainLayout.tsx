@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router";
 import { LayoutDashboard, Settings, Database, FileText, BarChart3, Menu, X, Github } from "lucide-react";
 import { Button } from "./ui/button";
+import { getMostRecentReport } from "../utils/analysisReportsStorage";
 
 export function MainLayout() {
   const repoUrl = "https://github.com/smartvictor9815/TradingAgents-Web";
@@ -22,6 +23,30 @@ export function MainLayout() {
       return location.pathname === "/" || location.pathname === "/analysis";
     }
     return location.pathname === path;
+  };
+
+  const navigateWithResumeHint = (path: string) => {
+    if (path !== "/" && path !== "/analysis") {
+      navigate(path);
+      return;
+    }
+
+    const recent = getMostRecentReport();
+    if (!recent?.id) {
+      navigate(path);
+      return;
+    }
+
+    navigate(path, {
+      state: {
+        resumeHint: {
+          id: recent.id,
+          ticker: recent.ticker,
+          analysisDate: recent.analysisDate,
+          status: recent.status,
+        },
+      },
+    });
   };
 
   return (
@@ -73,7 +98,7 @@ export function MainLayout() {
               return (
                 <Button
                   key={item.path}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => navigateWithResumeHint(item.path)}
                   variant="ghost"
                   className={`w-full justify-start text-sm h-9 ${
                     isActive(item.path)
@@ -146,7 +171,7 @@ export function MainLayout() {
                   <Button
                     key={item.path}
                     onClick={() => {
-                      navigate(item.path);
+                      navigateWithResumeHint(item.path);
                       setMobileMenuOpen(false);
                     }}
                     variant="ghost"

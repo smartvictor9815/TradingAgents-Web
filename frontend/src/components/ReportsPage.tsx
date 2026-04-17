@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { FileText, Clock, TrendingUp, ChevronRight, Download, Trash2, ArrowLeft, Target } from "lucide-react";
+import { useNavigate } from "react-router";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { FileText, Clock, TrendingUp, ChevronRight, Download, Trash2, ArrowLeft, Target, ExternalLink } from "lucide-react";
 import { Button } from "./ui/button";
 import { toast } from "sonner";
 import { CustomRadarChart } from "./CustomRadarChart";
@@ -22,6 +25,31 @@ import { ExportMenuPortal } from "./ExportMenuPortal";
 
 const exportMenuItemClass =
   "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs text-[#e6edf3] hover:bg-[#1c2128] focus-visible:bg-[#1c2128] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40";
+
+function HistoryMarkdown({
+  markdown,
+  compact = false,
+  className = "",
+}: {
+  markdown: string;
+  compact?: boolean;
+  className?: string;
+}) {
+  const md = markdown?.trim() ?? "";
+  if (!md) {
+    return <span className="text-[#6e7681]">—</span>;
+  }
+
+  return (
+    <div
+      className={`prose prose-invert max-w-none text-[#8b949e] prose-p:my-1 prose-headings:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-1 prose-pre:bg-[#0d1117] prose-pre:border prose-pre:border-[#30363d] prose-code:text-[#ffa657] prose-code:before:content-none prose-code:after:content-none ${
+        compact ? "prose-xs max-h-10 overflow-hidden" : "prose-sm"
+      } ${className}`.trim()}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
+    </div>
+  );
+}
 
 function ReportExportMenu({
   report,
@@ -232,6 +260,7 @@ function fullServerJsonToReport(json: Record<string, unknown>): Report {
 }
 
 export function ReportsPage() {
+  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
 
@@ -414,9 +443,10 @@ export function ReportsPage() {
             <TrendingUp className="w-4 h-4 text-[#f85149]" />
             Summary
           </h2>
-          <p className="text-[#8b949e] text-xs leading-relaxed whitespace-pre-wrap">
-            {selectedReport.summary}
-          </p>
+          <HistoryMarkdown
+            markdown={selectedReport.summary}
+            className="text-xs leading-relaxed"
+          />
         </div>
 
         {/* Recommendation */}
@@ -438,7 +468,10 @@ export function ReportsPage() {
               </div>
               <div className="text-xs text-[#8b949e] leading-relaxed">
                 <p className="text-[#6e7681] mb-1">Reasoning:</p>
-                {selectedReport.recommendation.reasoning}
+                <HistoryMarkdown
+                  markdown={selectedReport.recommendation.reasoning}
+                  className="text-xs leading-relaxed"
+                />
               </div>
             </div>
           </div>
@@ -588,9 +621,10 @@ export function ReportsPage() {
                     {formatDate(step.timestamp)}
                   </p>
                 )}
-                <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-                  {step.details}
-                </p>
+                <HistoryMarkdown
+                  markdown={step.details}
+                  className="text-sm text-gray-300 leading-relaxed"
+                />
               </div>
             ))}
           </div>
@@ -658,11 +692,31 @@ export function ReportsPage() {
                     </span>
                     <span>Analysis: {report.analysisDate}</span>
                   </div>
-                  <p className="text-xs text-[#8b949e] line-clamp-2">
-                    {report.summary}
-                  </p>
                 </div>
                 <div className="flex items-center gap-1.5 ml-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate("/analysis", {
+                        state: {
+                          resumeHint: {
+                            id: report.id,
+                            ticker: report.ticker,
+                            analysisDate: report.analysisDate,
+                            status: report.status,
+                          },
+                        },
+                      });
+                    }}
+                    className="text-[#66d9ef] hover:bg-[#66d9ef]/10 h-7 px-2 text-[10px]"
+                    title="Open this report in Analysis view"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                    Open in Analysis
+                  </Button>
                   <ReportExportMenu
                     variant="row"
                     report={report}
