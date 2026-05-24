@@ -883,6 +883,26 @@ class TradingAgentsGraph:
         self.reflector.reflect_portfolio_manager(
             self.curr_state, returns_losses, self.portfolio_manager_memory
         )
+        self.reflector.reflect_risk_analysts(
+            self.curr_state, returns_losses,
+            self.aggressive_memory, self.conservative_memory, self.neutral_memory,
+        )
+
+    def self_reflect(self):
+        """Reflect without actual returns — uses decision consistency as proxy.
+
+        Called automatically after a completed analysis so agents accumulate
+        lessons across runs even when actual P&L is unknown. The ``returns``
+        placeholder is set to ``"unknown (self-reflection)"`` so the reflector
+        focuses on reasoning quality rather than outcome correctness.
+        """
+        if self.curr_state is None:
+            _log_graph.debug("self_reflect skipped: no current state")
+            return
+        try:
+            self.reflect_and_remember("unknown (self-reflection — evaluate reasoning quality, internal consistency, and whether the analysis was thorough)")
+        except Exception as exc:
+            _log_graph.warning("self_reflect failed: %s", exc, exc_info=True)
 
     def process_signal(self, full_signal):
         """Process a signal to extract the core decision."""

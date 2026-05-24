@@ -1,4 +1,5 @@
 from tradingagents.agents.utils.agent_utils import build_instrument_context, get_language_instruction
+from tradingagents.agents.utils.history_context import build_portfolio_manager_history
 
 
 def create_portfolio_manager(llm, memory):
@@ -22,6 +23,9 @@ def create_portfolio_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
+        pm_history = build_portfolio_manager_history(state["company_of_interest"])
+        history_block = f"\n- Prior analyses for this ticker:\n{pm_history}" if pm_history else ""
+
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 
 {instrument_context}
@@ -38,10 +42,13 @@ def create_portfolio_manager(llm, memory):
 **Context:**
 - Research Manager's investment plan: **{research_plan}**
 - Trader's transaction proposal: **{trader_plan}**
-- Lessons from past decisions: **{past_memory_str}**
+- Lessons from past decisions: **{past_memory_str}**{history_block}
 - Analyst reports (market / sentiment / news / fundamentals) include a `## Confidence`
   block with `confidence_score` hints. Use those hints as priors, then calibrate by
   cross-checking consistency, evidence quality, and conflict severity.
+- If prior analyses for this ticker are available, compare the current situation with past
+  assessments. Note trend changes, whether prior recommendations were consistent, and
+  whether new data significantly shifts the outlook.
 
 **Required Output Format (STRICT JSON ONLY, no extra text):**
 {{

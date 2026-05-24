@@ -1,6 +1,7 @@
 import functools
 
 from tradingagents.agents.utils.agent_utils import build_instrument_context
+from tradingagents.agents.utils.history_context import build_historical_context
 
 
 def create_trader(llm, memory):
@@ -23,9 +24,12 @@ def create_trader(llm, memory):
         else:
             past_memory_str = "No past memories found."
 
+        historical_context = build_historical_context(company_name)
+        history_section = f"\n\n{historical_context}" if historical_context else ""
+
         context = {
             "role": "user",
-            "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. {instrument_context} This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
+            "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. {instrument_context} This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.{history_section}",
         }
 
         messages = [

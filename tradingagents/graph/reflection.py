@@ -118,3 +118,22 @@ Adhere strictly to these instructions, and ensure your output is detailed, accur
             judge_decision, situation, returns_losses
         )
         portfolio_manager_memory.add_situations([(situation, result)])
+
+    def reflect_risk_analysts(
+        self, current_state, returns_losses,
+        aggressive_memory, conservative_memory, neutral_memory,
+    ):
+        """Reflect on each risk analyst's arguments and update their memories."""
+        situation = self._extract_current_situation(current_state)
+        risk_state = current_state.get("risk_debate_state", {})
+
+        for hist_key, mem in [
+            ("aggressive_history", aggressive_memory),
+            ("conservative_history", conservative_memory),
+            ("neutral_history", neutral_memory),
+        ]:
+            report = risk_state.get(hist_key, "")
+            if not report or not report.strip():
+                continue
+            result = self._reflect_on_component(report, situation, returns_losses)
+            mem.add_situations([(situation, result)])

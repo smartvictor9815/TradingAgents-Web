@@ -96,6 +96,56 @@ class FinancialSituationMemory:
         self.documents = []
         self.recommendations = []
         self.bm25 = None
+        if self.persist:
+            self._clear_db()
+
+    # ------------------------------------------------------------------
+    # SQLite persistence helpers
+    # ------------------------------------------------------------------
+
+    def _load_from_db(self) -> None:
+        try:
+            db = _memory_db_path()
+            if not db.exists():
+                return
+            conn = sqlite3.connect(str(db), check_same_thread=False)
+            _init_memory_db(conn)
+            cur = conn.execute(
+                "SELECT situation, recommendation FROM agent_memories WHERE memory_name = ? ORDER BY id",
+                (self.name,),
+            )
+            for row in cur.fetchall():
+                self.documents.append(row[0])
+                self.recommendations.append(row[1])
+            conn.close()
+            self._rebuild_index()
+            if self.documents:
+                _log.debug("Loaded %d memories for %s", len(self.documents), self.name)
+        except Exception as exc:
+            _log.debug("Failed to load memories for %s: %s", self.name, exc)
+
+    def _save_to_db(self, pairs: List[Tuple[str, str]]) -> None:
+        try:
+            conn = sqlite3.connect(str(_memory_db_path()), check_same_thread=False)
+            _init_memory_db(conn)
+            conn.executemany(
+                "INSERT INTO agent_memories (memory_name, situation, recommendation) VALUES (?, ?, ?)",
+                [(self.name, sit, rec) for sit, rec in pairs],
+            )
+            conn.commit()
+            conn.close()
+        except Exception as exc:
+            _log.debug("Failed to save memories for %s: %s", self.name, exc)
+
+    def _clear_db(self) -> None:
+        try:
+            conn = sqlite3.connect(str(_memory_db_path()), check_same_thread=False)
+            _init_memory_db(conn)
+            conn.execute("DELETE FROM agent_memories WHERE memory_name = ?", (self.name,))
+            conn.commit()
+            conn.close()
+        except Exception as exc:
+            _log.debug("Failed to clear memories for %s: %s", self.name, exc)
 
 
 if __name__ == "__main__":

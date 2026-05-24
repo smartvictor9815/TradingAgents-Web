@@ -393,6 +393,24 @@ async def _run_analysis(task_id: str, adapter: TradingAgentAPIAdapter, ticker: s
             "final_decision": final_decision,
             "error_message": None,
         })
+
+        # Auto-reflect so agents accumulate lessons across runs
+        try:
+            graph.self_reflect()
+            ta_info(
+                _log,
+                "self_reflect_completed",
+                task_id=task_id,
+                ticker=ticker,
+            )
+        except Exception as exc:
+            ta_warning(
+                _log,
+                "self_reflect_failed",
+                task_id=task_id,
+                ticker=ticker,
+                error=str(exc),
+            )
     except asyncio.CancelledError:
         tasks[task_id]["status"] = "cancelled"
         adapter._progress_callback("task_cancelled", {})

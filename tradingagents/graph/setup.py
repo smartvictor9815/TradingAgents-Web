@@ -97,9 +97,9 @@ class GraphSetup:
         trader_node = create_trader(self.quick_thinking_llm, self.trader_memory)
 
         # Create risk analysis nodes
-        aggressive_analyst = create_aggressive_debator(self.quick_thinking_llm)
-        neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
-        conservative_analyst = create_conservative_debator(self.quick_thinking_llm)
+        aggressive_analyst = create_aggressive_debator(self.quick_thinking_llm, self.aggressive_memory)
+        neutral_analyst = create_neutral_debator(self.quick_thinking_llm, self.neutral_memory)
+        conservative_analyst = create_conservative_debator(self.quick_thinking_llm, self.conservative_memory)
         portfolio_manager_node = create_portfolio_manager(
             self.deep_thinking_llm, self.portfolio_manager_memory
         )
