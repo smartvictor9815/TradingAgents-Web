@@ -165,6 +165,9 @@ class TradingAgentsGraph:
         self.trader_memory = FinancialSituationMemory("trader_memory", self.config)
         self.invest_judge_memory = FinancialSituationMemory("invest_judge_memory", self.config)
         self.portfolio_manager_memory = FinancialSituationMemory("portfolio_manager_memory", self.config)
+        self.aggressive_memory = FinancialSituationMemory("aggressive_memory", self.config)
+        self.conservative_memory = FinancialSituationMemory("conservative_memory", self.config)
+        self.neutral_memory = FinancialSituationMemory("neutral_memory", self.config)
 
         # Create tool nodes
         self.tool_nodes = self._create_tool_nodes()
@@ -184,6 +187,9 @@ class TradingAgentsGraph:
             self.invest_judge_memory,
             self.portfolio_manager_memory,
             self.conditional_logic,
+            aggressive_memory=self.aggressive_memory,
+            conservative_memory=self.conservative_memory,
+            neutral_memory=self.neutral_memory,
         )
 
         self.propagator = Propagator()
@@ -892,15 +898,16 @@ class TradingAgentsGraph:
         """Reflect without actual returns — uses decision consistency as proxy.
 
         Called automatically after a completed analysis so agents accumulate
-        lessons across runs even when actual P&L is unknown. The ``returns``
-        placeholder is set to ``"unknown (self-reflection)"`` so the reflector
-        focuses on reasoning quality rather than outcome correctness.
+        lessons across runs even when actual P&L is unknown.
         """
         if self.curr_state is None:
             _log_graph.debug("self_reflect skipped: no current state")
             return
         try:
-            self.reflect_and_remember("unknown (self-reflection — evaluate reasoning quality, internal consistency, and whether the analysis was thorough)")
+            self.reflect_and_remember(
+                "unknown (self-reflection — evaluate reasoning quality, "
+                "internal consistency, and whether the analysis was thorough)"
+            )
         except Exception as exc:
             _log_graph.warning("self_reflect failed: %s", exc, exc_info=True)
 
