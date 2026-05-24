@@ -96,7 +96,7 @@
 
 ### 4.1 历史列表页
 
-![History 列表页](https://raw.githubusercontent.com/smartvictor9815/TradingAgents-Web/main/assets/web/History_main.png)
+![History 列表页](https://raw.githubusercontent.com/smartvictor9815/TradingAgents-Web/main/assets/web/History_main.webp)
 
 在这里你可以管理过去跑过的任务。
 

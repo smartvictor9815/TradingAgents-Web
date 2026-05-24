@@ -96,7 +96,7 @@ This page defines how analysis runs, including language, analyst set, and resear
 
 ### 4.1 History list
 
-![History list](https://raw.githubusercontent.com/smartvictor9815/TradingAgents-Web/main/assets/web/History_main.png)
+![History list](https://raw.githubusercontent.com/smartvictor9815/TradingAgents-Web/main/assets/web/History_main.webp)
 
 Use this page to manage previous tasks:
 

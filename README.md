@@ -301,7 +301,12 @@ PYTHONPATH=. pytest tests/ -v
 
 ## Data directory
 
-Report SQLite DB and related files default under `data/` (override with env **`TRADINGAGENTS_DATA_DIR`**).
+Report SQLite DB and related files default under `data/` (override with env **`TRADINGAGENTS_DATA_DIR`**):
+
+| File | Purpose |
+|------|---------|
+| `analysis_reports.db` | Persisted analysis reports and history |
+| `agent_memory.db` | Agent reflection memories (lessons learned across runs) |
 
 ---
 
