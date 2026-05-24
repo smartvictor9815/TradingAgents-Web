@@ -2,27 +2,71 @@
 
 Uses BM25 (Best Matching 25) algorithm for retrieval - no API calls,
 no token limits, works offline with any LLM provider.
+
+Memory is optionally persisted to SQLite so lessons survive across
+process restarts and separate ``TradingAgentsGraph`` instances.
 """
 
 from rank_bm25 import BM25Okapi
 from typing import List, Tuple
+import json
+import logging
+import os
 import re
+import sqlite3
+from pathlib import Path
+
+_log = logging.getLogger(__name__)
+
+
+def _memory_db_path() -> Path:
+    root = Path(__file__).resolve().parents[3]
+    data_dir = Path(os.environ.get("TRADINGAGENTS_DATA_DIR", str(root / "data")))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / "agent_memory.db"
+
+
+def _init_memory_db(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            memory_name TEXT NOT NULL,
+            situation TEXT NOT NULL,
+            recommendation TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_memories_name ON agent_memories(memory_name)"
+    )
+    conn.commit()
 
 
 class FinancialSituationMemory:
-    """Memory system for storing and retrieving financial situations using BM25."""
+    """Memory system for storing and retrieving financial situations using BM25.
 
-    def __init__(self, name: str, config: dict = None):
+    When ``persist=True`` (the default), memories are also written to and loaded
+    from a SQLite database so they survive across process restarts.
+    """
+
+    def __init__(self, name: str, config: dict = None, persist: bool = True):
         """Initialize the memory system.
 
         Args:
             name: Name identifier for this memory instance
-            config: Configuration dict (kept for API compatibility, not used for BM25)
+            config: Configuration dict (kept for API compatibility)
+            persist: If True, load/save memories to SQLite on disk
         """
         self.name = name
+        self.persist = persist
         self.documents: List[str] = []
         self.recommendations: List[str] = []
         self.bm25 = None
+
+        if self.persist:
+            self._load_from_db()
 
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize text for BM25 indexing.
@@ -53,6 +97,9 @@ class FinancialSituationMemory:
 
         # Rebuild BM25 index with new documents
         self._rebuild_index()
+
+        if self.persist:
+            self._save_to_db(situations_and_advice)
 
     def get_memories(self, current_situation: str, n_matches: int = 1) -> List[dict]:
         """Find matching recommendations using BM25 similarity.
